@@ -1,0 +1,46 @@
+Package: GagnonMR
+Title: Perform Mendelian randomization analysis in an automated concise way
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Eloi",
+           family = "Gagnon",
+           role = c("aut", "cre"),
+           email = "eloi.gagnon@ulaval.ca",
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: Here is a repository for all functions developped by Éloi for performing Mendelian Randomization articles. 
+  The package builds greatly on TwoSampleMr package. All function are thought to be used in a pipeline manner. 
+  From cleaning raw summary statistics to plotting results.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.2
+Imports: 
+    TwoSampleMR,
+    data.table,
+    MRInstruments,
+    varhandle,
+    readxl,
+    parallel,
+    foreach,
+    doParallel,
+    MendelianRandomization,
+    ieugwasr,
+    magrittr,
+    dplyr,
+    grid,
+    LDlinkR,
+    biomaRt,
+    qvalue,
+    coloc,
+    gwasglue,
+    gwasvcf,
+    VariantAnnotation,
+    genetics.binaRies,
+    ggplot2,
+    mr.raps,
+    plyr,
+    scales,
+    tidyr
+Depends: 
+    tidyverse
