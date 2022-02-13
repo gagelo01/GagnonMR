@@ -2,7 +2,7 @@
 % Please edit documentation in R/hemani_pipeline.R
 \name{formattovcf_createindex}
 \alias{formattovcf_createindex}
-\title{Title}
+\title{This functions format to vcf and create an index. THIS FUNCTION CANNOT BE RUN IN PARALLEL}
 \usage{
 formattovcf_createindex(
   all_out,
@@ -12,6 +12,7 @@ formattovcf_createindex(
   se_col,
   pval_col,
   eaf_col,
+  maf_col = NULL,
   effect_allele_col,
   other_allele_col,
   ncase_col = "ncase",
@@ -21,7 +22,8 @@ formattovcf_createindex(
   pos_col,
   units,
   traduction = fread("/mnt/sde/couchr02/1000G_Phase3/1000G_Phase3_b37_rsid_maf.txt"),
-  out_wd = "/mnt/sdf/gagelo01/Vcffile/Server_vcf/",
+  out_wd = "/mnt/sdf/gagelo01/Vcffile/Server_vcf",
+  df_index = fread("/mnt/sdf/gagelo01/Vcffile/server_gwas_id.txt"),
   group_name,
   year,
   author,
@@ -31,7 +33,9 @@ formattovcf_createindex(
   initial_build,
   category,
   pmid,
-  note
+  note,
+  should_create_id = TRUE,
+  ID = NA
 )
 }
 \arguments{
@@ -47,7 +51,9 @@ formattovcf_createindex(
 
 \item{pval_col}{the name of the pval col, Must be present}
 
-\item{eaf_col}{the name of the eaf col, NULL if absent}
+\item{eaf_col}{the name of the eaf col, NULL if absent. If present will flip eaf according to reference panel.}
+
+\item{maf_col}{the name of the maf col, NULL if absent. If present, will use maf to infer eaf.}
 
 \item{effect_allele_col}{the name of the effect allele, must be present}
 
@@ -65,9 +71,11 @@ formattovcf_createindex(
 
 \item{units}{ideally "SD", "log odds". If this is not the case, can put any character such as "year" or "Cm"}
 
-\item{traduction}{the traduction file to map to the reference panel}
+\item{traduction}{the traduction file to map to the reference panel. IF NULL, all harmonisation steps will be skipped. This take less time, and must be used only on already harmonised data.}
 
 \item{out_wd}{where you want your vcf.gz and vcf.gz.tbi to be stored}
+
+\item{df_index}{the data.frame with all id.}
 
 \item{group_name}{will be paste in df_index}
 
@@ -88,10 +96,14 @@ formattovcf_createindex(
 \item{pmid}{the pmid as.numeric}
 
 \item{note}{any aditional note in character.}
+
+\item{should_create_id}{IF TRUE will automatiquely create an ID. If false will not, but will search for ID in the df_index as specified in the argument ID.}
+
+\item{ID}{Must be NA when create ID == TRUE. Otherwise, the ID name will be used to name the files.}
 }
 \value{
 a vcf.gz and vcf.gz.tbi with all necessary column, in a standard format and mapped to reference panel
 }
 \description{
-Title
+This functions format to vcf and create an index. THIS FUNCTION CANNOT BE RUN IN PARALLEL
 }

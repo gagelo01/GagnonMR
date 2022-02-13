@@ -2,7 +2,7 @@
 % Please edit documentation in R/hemani_pipeline.R
 \name{create_id}
 \alias{create_id}
-\title{Title attribute a new id to your new phenotype}
+\title{Attribute a new id to your new phenotype}
 \usage{
 create_id(df)
 }
@@ -13,5 +13,5 @@ create_id(df)
 the df_index with a new row and a new index
 }
 \description{
-Title attribute a new id to your new phenotype
+Attribute a new id to your new phenotype
 }

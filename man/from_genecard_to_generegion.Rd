@@ -15,7 +15,7 @@ from_genecard_to_generegion(
 )
 }
 \arguments{
-\item{genecard_name}{the name of the gene genecard name}
+\item{genecard_name}{A vector the names of the gene genecard name}
 
 \item{window}{the window 1e6 == 5e5 upward 5e5 downward}
 

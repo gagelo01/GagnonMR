@@ -54,3 +54,38 @@ gwasvcf_to_coloc_eloi <- function (vcf1, vcf2, chrompos) {
   }
   return(list(dataset1 = out1, dataset2 = out2))
 }
+
+
+
+#' Title dah
+#'
+#' @param region dah
+#' @param vcf dah
+#' @param bfile dah
+#' @param plink_bin dah
+#'
+#' @return
+#' @export
+
+gwasvcf_to_finemapr_gagnon <- function (region, vcf, bfile, plink_bin = genetics.binaRies::get_plink_binary())
+{
+  message("Extracting data from vcf")
+  ext <- gwasvcf::query_gwas(vcf = vcf, chrompos = region)
+  out <- lapply(unique(region), function(i) {
+    message(i)
+    m <- list()
+    temp <- gwasvcf::query_gwas(vcf = ext, chrompos = i)
+    m[["ld"]] <- ieugwasr::ld_matrix(names(temp), bfile = bfile,
+                                     plink_bin = plink_bin, with_alleles = FALSE) %>%
+      gwasglue:::greedy_remove()
+    tib <- gwasvcf::vcf_to_tibble(temp)
+    m[["z"]] <- tib %>% subset(rsid %in% rownames(m[["ld"]])) %>%
+      dplyr::mutate(z = ES/SE) %>% dplyr::select(snp = rsid,
+                                                 zscore = z)
+    m[["n"]] <- tib[["SS"]]
+    return(m)
+  })
+  class(out) <- "FinemaprList"
+  return(out)
+}
+

@@ -4,7 +4,12 @@
 \alias{all_mr_methods}
 \title{All sensitivity analysis}
 \usage{
-all_mr_methods(dat, SignifThreshold = 0.05, Primary_mr = "default")
+all_mr_methods(
+  dat,
+  SignifThreshold = 0.05,
+  Primary_mr = "default",
+  short = FALSE
+)
 }
 \arguments{
 \item{dat}{An harmonised data.frame like in TwoSampleMR}
@@ -15,6 +20,8 @@ all_mr_methods(dat, SignifThreshold = 0.05, Primary_mr = "default")
 The random-effects model ("random") is a multiplicative random-effects model, allowing overdispersion in the weighted linear regression (the residual standard error is not fixed to be 1, but is not allowed to take values below 1).
 The fixed-effect model ("fixed") sets the residual standard error to be 1. The "default" setting is to use a fixed-effect model with 3 genetic variants or fewer, and otherwise to use a random-effects model.
 The "random_underdispersion" is the default method in TwoSampleMR.}
+
+\item{short}{if TRUE only runs egger, weighted mode median and egger if FALSE runs the rest}
 }
 \value{
 a data.frame with results of sensitivity analysis.

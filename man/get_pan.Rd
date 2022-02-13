@@ -8,7 +8,7 @@ get_pan(
   vcffile_exp,
   vcffile_out,
   ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
-  chrompos = NULL
+  chrompos = NA
 )
 }
 \arguments{

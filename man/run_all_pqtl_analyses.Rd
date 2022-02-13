@@ -19,9 +19,7 @@ run_all_pqtl_analyses(
 
 \item{chrompos}{the gene region e.g. 1:30000-40000}
 
-\item{method_list}{the list of method to include}
-
-\item{ldref}{the path to the ldreferene panel}
+\item{method_list}{the list of method to include "get_pan", "get_reverseMR", "get_uni_cis", "get_coloc", "get_multicis", "get_susie_coloc", "get_multicis_susie"}
 }
 \value{
 a data.table with all results

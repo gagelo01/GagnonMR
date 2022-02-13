@@ -32,13 +32,13 @@ mr_conmix_wrapper <- function (dat) {
 #' The random-effects model ("random") is a multiplicative random-effects model, allowing overdispersion in the weighted linear regression (the residual standard error is not fixed to be 1, but is not allowed to take values below 1).
 #' The fixed-effect model ("fixed") sets the residual standard error to be 1. The "default" setting is to use a fixed-effect model with 3 genetic variants or fewer, and otherwise to use a random-effects model.
 #' The "random_underdispersion" is the default method in TwoSampleMR.
-#'
+#' @param short if TRUE only runs egger, weighted mode median and egger if FALSE runs the rest
 #' @return a data.frame with results of sensitivity analysis.
 #'
 #' @import data.table
 #'
 #' @export
-all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default") {
+all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", short = FALSE) {
   dat<-dat[dat$mr_keep == TRUE,]
   if (nrow(dat) == 1) {
     res <- mr(dat, method_list = c("mr_wald_ratio"))
@@ -51,7 +51,7 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default") 
     res[, id.outcome := NULL]
     return(res)
   }else{
-    dat <- as.data.table(dat)
+    dat <- data.table::as.data.table(dat)
     if(Primary_mr == "random"){ primary_analysis <- "mr_ivw_mre"}
     if(Primary_mr == "fixed"){ primary_analysis <- "mr_ivw_fe"}
     if(Primary_mr == "random_underdispersion"){ primary_analysis <- "mr_ivw"}
@@ -65,6 +65,8 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default") 
     }
     dat<- dat[dat$mr_keep,]
     res <- TwoSampleMR::mr(dat, method_list=c(primary_analysis, "mr_weighted_mode", "mr_weighted_median", "mr_egger_regression"))
+
+    if(short == TRUE) {return(res)}
     #mr raps
     out <-  mr.raps::mr.raps(b_exp = dat$beta.exposure, b_out = dat$beta.outcome, se_exp = dat$se.exposure,
                              se_out = dat$se.outcome, over.dispersion = TRUE, loss.function = "tukey")
@@ -73,8 +75,8 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default") 
                            exposure = dat$exposure[1], method = "Robust adjusted profile score (RAPS)", nsnp = nrow(dat),
                            b = out$beta.hat, se = out$beta.se, pval = pnorm(-abs(out$beta.hat/out$beta.se)) * 2)
     res <- rbind(res, out_raps)
-    #Mr Presso
-    if(nrow(dat) > 2){
+    #MR Presso
+    if(nrow(dat) > 3){
       tryCatch({
         ok<-TwoSampleMR::run_mr_presso(as.data.frame(dat))
 
@@ -125,9 +127,17 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default") 
     data.table::setDT(dt)
     dt[, lci := b-(se*1.96)]
     dt[, uci := b+(se*1.96)]
+
+
+    ####MR-radial
+    if(!any(grepl("presso", tolower(dt$method)))){
+      res <- TwoSampleMR::mr(dat, method_list=c("mr_ivw_radial"))
+      dt <- rbindlist(list(dt, res), fill = TRUE)
+    }
+
     #contamination mixture
     tryCatch({ #this condition is not very good, but I do not have anything better for the moment
-      conmixres <- mr_conmix_wrapper(dat)
+      conmixres <- GagnonMR:::mr_conmix_wrapper(dat)
       conmixres[, "id.exposure"] <- dt[1,"id.exposure"]
       conmixres[, "id.outcome"] <- dt[1,"id.outcome"]
     },
@@ -145,7 +155,7 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default") 
       ifelse(grepl("Inverse variance weighted", .), "Primary analysis", .) %>%
       ifelse(. %in% c("Weighted mode", "Weighted median"), "Consensus methods", .) %>%
       ifelse(. %in% c("Robust adjusted profile score (RAPS)", "MR Egger", "Contamination mixture"), "Pleiotropy test", .) %>%
-      ifelse(grepl("MR-P", .), "Outlier-robust methods", .)
+      ifelse(grepl("MR-P|radial", .), "Outlier-robust methods", .)
     result[,type_of_test := type_of_test]
     return(result)
   }

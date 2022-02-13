@@ -9,7 +9,7 @@ run_hypr_on_aligned(df_aligned, ...)
 \arguments{
 \item{df_aligned}{a data.frame with everything}
 
-\item{...}{}
+\item{...}{arguments passed to te function hyprcoloc::hyprcoloc}
 }
 \value{
 

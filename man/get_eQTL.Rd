@@ -10,10 +10,17 @@ get_eQTL(
   mywindow = 1e+06,
   mythreshold = 1,
  
-    gencode = as.data.frame(fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt")),
+    gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt"),
  
     vcf_file = "/mnt/sde/pernic01/eQTL/GTEx8/genotypes/geno_693Indiv_maf_0.01_chr1_22.vcf.gz",
-  temp_dir = "/mnt/sde/gagelo01/temp/"
+ 
+    expr_mat_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/GTEx_EUR_Analysis_v8_eQTL_expression_matrices/",
+    tissue, ".v8.normalized_expression_EUR_chr1_22.bed"),
+ 
+    cov_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/Covariates_GTEx8_EUR/",
+    tissue, "_covariates_GTEx8_EUR.txt"),
+  ensembl_human = biomaRt::useEnsembl(biomart = "genes", dataset =
+    "hsapiens_gene_ensembl")
 )
 }
 \arguments{

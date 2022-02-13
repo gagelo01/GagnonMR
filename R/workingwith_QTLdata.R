@@ -82,127 +82,145 @@ calculate_multicis_mr <- function(inst_pqtl, outcome, ldmat ) {
 #'
 #' @return a data.frame
 #' @export
-#'
-#' @examples
 
 get_eQTL<- function(tissue,
                     gene ,
-                    mywindow = 1000000,
+                    mywindow = 1e6,
                     mythreshold = 1,
-                    gencode = as.data.frame(fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt")),
+                    gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt"),
                     vcf_file = "/mnt/sde/pernic01/eQTL/GTEx8/genotypes/geno_693Indiv_maf_0.01_chr1_22.vcf.gz",
-                    temp_dir = "/mnt/sde/gagelo01/temp/" ) {
-  expr_mat_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/GTEx_EUR_Analysis_v8_eQTL_expression_matrices/",
-                         tissue,".v8.normalized_expression_EUR_chr1_22.bed")
-  cov_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/Covariates_GTEx8_EUR/",
-                    tissue,"_covariates_GTEx8_EUR.txt")
+                    expr_mat_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/GTEx_EUR_Analysis_v8_eQTL_expression_matrices/",
+                                           tissue,".v8.normalized_expression_EUR_chr1_22.bed"), #expression matrices. column are subjects, and row is their expression for each gene
+                    cov_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/Covariates_GTEx8_EUR/",
+                                      tissue,"_covariates_GTEx8_EUR.txt"),
+                    ensembl_human = biomaRt::useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl") ) {
 
 
   gencode_small = gencode[which(gencode$gene_name %in% gene),]
-  if(nrow(gencode_small) == 0) {
-    return(data.table(tissue = tissue, probe= gencode_small[1,"gene_id"]))
-  } else {
-    gene_id = unique(gencode_small$gene_id)
-    chr = unique(gencode_small$chr)
-    mystart = min(gencode_small$start)
-    myend = max(gencode_small$end)
-
-    ### treatment of the phenos file
-
-    matr = as.data.frame(fread(expr_mat_file))
-    num_suj = length(colnames(matr)[grep("GTEX", colnames(matr))])
-    matr$"#chr" = sub("chr","",matr$"#chr")
-    matr = cbind(matr[,c("#chr", "start", "end", "gene_id")], data.frame(gid = rep(".", dim(matr)[1]),
-                                                                         strand = rep("+", dim(matr)[1])), matr[,grep("GTEX-", colnames(matr))])
-    colnames(matr)[grep("GTEX-", colnames(matr))] = paste(colnames(matr)[grep("GTEX-", colnames(matr))],
-                                                          colnames(matr)[grep("GTEX-", colnames(matr))], sep = "_")
-    fwrite(matr,paste0(temp_dir,"mymatr.bed"),sep="\t",quote=F,row.names=F)
-
-    # indexing new file (needed for QTLTools)
-
-    system2(command = "bgzip",
-            args = c("-f",
-                     paste0(temp_dir, "mymatr.bed"),
-                     "&&",
-                     "tabix",
-                     "-p",
-                     "bed",
-                     paste0(temp_dir, "mymatr.bed.gz")))
-
-    mymatr =  paste0(temp_dir, "mymatr.bed.gz")
-
-    ### traitement du fichier covar
-
-    covar = as.data.frame(fread(cov_file))
-    colnames(covar)[grep("GTEX-", colnames(covar))] = paste(colnames(covar)[grep("GTEX-", colnames(covar))],
-                                                            colnames(covar)[grep("GTEX-", colnames(covar))], sep = "_")
-    colnames(covar)[colnames(covar) == "ID"] = "id"
-    covar$id[grep("InferredCov", covar$id)] = gsub(covar$id[grep("InferredCov", covar$id)], pattern = " ", replacement = "_")
-    fwrite(covar,paste0(temp_dir, "mycovar.txt"),sep="\t",quote=F,row.names=F)
-
-    mycovar = paste0(temp_dir, "mycovar.txt")
-
-
-    ###  QTLtools analysis
-
-    system2(command = "QTLtools",
-            args = c("cis",
-                     "--vcf",
-                     vcf_file,
-                     "--bed",
-                     mymatr,
-                     "--cov",
-                     mycovar,
-                     "--nominal",
-                     mythreshold,
-                     "--region",
-                     paste0(chr, ":", mystart, "-", myend),
-                     "--window",
-                     format(mywindow/2, scientific = F),
-                     "--out",
-                     paste0(temp_dir, tissue,"_", gene,"_QTLtools_nominal_",mythreshold,"_window_",mywindow / 1000,"kb",".txt")))
-
-    path_qtl <- paste0(temp_dir, tissue,"_", gene,"_QTLtools_nominal_",mythreshold,"_window_",mywindow / 1000,"kb",".txt")
-    if(!file.exists(path_qtl)) { return(data.table(tissue = tissue, probe= gencode_small[1,"gene_id"]))}
-    QTL = fread(path_qtl)
-
-    col_QTLtools_nominal = c(
-      "probe",
-      "chr",
-      "start",
-      "end",
-      "strand",
-      "n_cis_variant_tested",
-      "distance_probe_variant",
-      "variant",
-      "chr_top_variant",
-      "start_top_variant",
-      "end_top_variant",
-      "p_val",
-      "beta",
-      "top_variant"
-    )
-
-    colnames(QTL) = col_QTLtools_nominal
-
-    covar = covar[,-which(colnames(covar) == "id")]
-    QTL[, zscore := abs(qnorm(p_val/2))*(beta/abs(beta))]
-
-    QTL[, se := beta / zscore]
-
-    QTL[, tissue := tissue]
-    QTL[,sample_size := num_suj]
-
-    QTL <- QTL[!is.na(QTL$p_val),]
-
-    file.remove(mymatr)
-    file.remove(paste0(mymatr,".tbi"))
-    file.remove(mycovar)
-    file.remove(paste0(temp_dir, tissue,"_", gene,"_QTLtools_nominal_",mythreshold,"_window_",mywindow / 1000,"kb",".txt"))
-
-    return(QTL)
+  if(nrow(gencode_small)==0){
+    gencode_small <- biomaRt::getBM(attributes = c("chromosome_name", "start_position", "end_position", "ensembl_gene_id", "hgnc_symbol"),
+                                    filters = "hgnc_symbol", values = gene,
+                                    mart = ensembl_human) %>% as.data.table(.)
+    gencode_small <- gencode_small[chromosome_name %in% 1:22, ]
+    colnames(gencode_small) <- c("chr", "start", "end","gene_id","gene_name")
   }
+
+  if(nrow(gencode_small)==0){
+    return(data.table(tissue = tissue,
+                      probe =  biomaRt::getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),
+                                              filters = "hgnc_symbol", values = gene,
+                                              mart = ensembl_human) %>% .$ensembl_gene_id))
+  }
+
+  gene_id = unique(gencode_small$gene_id)
+  chr = unique(gencode_small$chr)
+  mystart = min(gencode_small$start)
+  myend = max(gencode_small$end)
+
+  ### treatment of the phenos file
+
+  matr = as.data.frame(fread(expr_mat_file))
+  num_suj = length(colnames(matr)[grep("GTEX", colnames(matr))])
+  matr$"#chr" = sub("chr","",matr$"#chr")
+  matr = cbind(matr[,c("#chr", "start", "end", "gene_id")], data.frame(gid = rep(".", dim(matr)[1]),
+                                                                       strand = rep("+", dim(matr)[1])), matr[,grep("GTEX-", colnames(matr))])
+  colnames(matr)[grep("GTEX-", colnames(matr))] = paste(colnames(matr)[grep("GTEX-", colnames(matr))],
+                                                        colnames(matr)[grep("GTEX-", colnames(matr))], sep = "_")
+
+  temp_file <- tempfile()
+  fwrite(matr,paste0(temp_file,".bed"),sep="\t",quote=F,row.names=F)
+
+  # indexing new file (needed for QTLTools)
+
+  system2(command = "bgzip",
+          args = c("-f",
+                   paste0(temp_file,".bed"),
+                   "&&",
+                   "tabix",
+                   "-p",
+                   "bed",
+                   paste0(temp_file,".bed.gz")))
+
+  mymatr <-  paste0(temp_file,".bed.gz")
+
+  ### traitement du fichier covar
+
+  covar <- as.data.frame(fread(cov_file))
+  colnames(covar)[grep("GTEX-", colnames(covar))] = paste(colnames(covar)[grep("GTEX-", colnames(covar))],
+                                                          colnames(covar)[grep("GTEX-", colnames(covar))], sep = "_")
+  colnames(covar)[colnames(covar) == "ID"] = "id"
+  covar$id[grep("InferredCov", covar$id)] = gsub(covar$id[grep("InferredCov", covar$id)], pattern = " ", replacement = "_")
+
+  fwrite(covar,paste0(temp_file, ".txt"),sep="\t",quote=F,row.names=F)
+
+  mycovar = paste0(temp_file, ".txt")
+
+
+  ###  QTLtools analysis
+
+  system2(command = "QTLtools",
+          args = c("cis",
+                   "--vcf",
+                   vcf_file,
+                   "--bed",
+                   mymatr,
+                   "--cov",
+                   mycovar,
+                   "--nominal",
+                   mythreshold,
+                   "--region",
+                   paste0(chr, ":", mystart, "-", myend),
+                   "--window",
+                   format(mywindow/2, scientific = F),
+                   "--out",
+                   paste0(temp_file, "out.txt")))
+
+  path_qtl <- paste0(temp_file, "out.txt")
+  if(!file.exists(path_qtl)) { return(data.table(tissue = tissue,
+                                                 probe =  biomaRt::getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),
+                                                                         filters = "hgnc_symbol", values = gene,
+                                                                         mart = ensembl_human) %>% .$ensembl_gene_id))}
+  QTL <- fread(path_qtl)
+  QTL <- QTL[sub("\\..*", "", V1) %in% gencode_small[, sub("\\..*", "", unique(gene_id))]] #make sure that even from ensembl it fits
+
+  col_QTLtools_nominal = c(
+    "probe",
+    "chr",
+    "start",
+    "end",
+    "strand",
+    "n_cis_variant_tested",
+    "distance_probe_variant",
+    "variant",
+    "chr_top_variant",
+    "start_top_variant",
+    "end_top_variant",
+    "p_val",
+    "beta",
+    "top_variant"
+  )
+
+  colnames(QTL) = col_QTLtools_nominal
+
+  covar = covar[,-which(colnames(covar) == "id")]
+  QTL[, zscore := abs(qnorm(p_val/2))*(beta/abs(beta))]
+
+  QTL[, se := beta / zscore]
+
+  QTL[, tissue := tissue]
+  QTL[,sample_size := num_suj]
+
+  QTL <- QTL[!is.na(QTL$p_val),]
+
+  unlink(mymatr)
+  unlink(paste0(mymatr,".tbi"))
+  unlink(mycovar)
+  unlink(path_qtl)
+  unlink(temp_file)
+
+  return(QTL)
 }
+
 #' to run after extracting data from gtex
 #'
 #' @param exposures the GTEx data.frame
@@ -213,8 +231,8 @@ get_eQTL<- function(tissue,
 #' @export
 format_gtex_data <- function(exposures,
                              translation = fread("/mnt/sde/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"),
-                             gencode = fread("/home/couchr02/Mendel_Commun/Nicolas/GTEx/gencode.v19.genes.v7.patched_contigs.txt")) {
-setnames(gencode, "gene_id", "ensembl_gene_id", skip_absent = TRUE)
+                             gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt")) {
+  setnames(gencode, "gene_id", "ensembl_gene_id", skip_absent = TRUE)
   data_eQTL <- separate(exposures, col = "variant", into = c("chr_todump", "pos_todump", "Allele1", "Allele2", "buildtodump"))
   data_eQTL <- merge(data_eQTL, translation, by.x = c("chr_top_variant", "start_top_variant"),
                      by.y = c("chr", "pos_b38"))
@@ -374,8 +392,6 @@ calculate_coloc_from_list_dataset <- function(list_dataset, exp, name_outcome) {
 #'
 #' @return
 #' @export
-#'
-#' @examples
 
 extract_all_cis_instrument_sun <- function(genecard_name = NULL, SOMAmerID = NULL, window = 1e6,
                                            minimum_maf =0.001, gencode_chr="gencode", traduction_chr="traduction",

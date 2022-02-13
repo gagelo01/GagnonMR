@@ -41,6 +41,13 @@ Imports:
     mr.raps,
     plyr,
     scales,
-    tidyr
+    tidyr,
+    S4Vectors,
+    susieR,
+    hyprcoloc,
+    purrr,
+    furrr,
+    stringr,
+    MVMR
 Depends: 
     tidyverse

@@ -38,8 +38,7 @@ return(combined_query)
 #'
 #' @return
 #' @export
-#'
-#' @examples
+
 fromdisease_tooutcome <- function (gwas_file, snp_col, outcome_name,
                                    beta_col, se_col, pval_col, eaf_col, effect_allele_col, other_allele_col,
                                    ncase_col = "ncase", ncontrol_col = "ncontrol", samplesize_col = "samplesize",

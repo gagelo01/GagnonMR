@@ -4,7 +4,7 @@
 \alias{get_reverseMR}
 \title{Get reverse MR}
 \usage{
-get_reverseMR(vcffile_exp, vcffile_out, chrompos = NULL)
+get_reverseMR(vcffile_exp, vcffile_out, chrompos = NA)
 }
 \arguments{
 \item{vcffile_exp}{the path to the exposure vcf.gz file}

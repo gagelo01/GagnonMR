@@ -6,7 +6,7 @@
 \usage{
 get_data_from_mrbase(
   id,
-  out_wd = "/home/couchr02/Mendel_Commun/Vcffile/MRBase_vcf/",
+  out_wd = "/home/couchr02/Mendel_Commun/Vcffile/MRBase_vcf",
   nthreads = 3
 )
 }
