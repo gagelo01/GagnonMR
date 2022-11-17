@@ -8,7 +8,8 @@ get_multicis_susie(
   vcffile_exp,
   vcffile_out,
   chrompos,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs"
+  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+  parameters = default_param()
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ get_multicis_susie(
 \item{chrompos}{dah}
 
 \item{ldref}{dah}
+
+\item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }
 \value{
 select as instrument the SNP with the highest PIP in each credible set. If no SNP has a p-value under 5e-8 or number of credible sets < 2 return empty data.frame.

@@ -2,18 +2,33 @@
 % Please edit documentation in R/hemani_pipeline.R
 \name{get_inst}
 \alias{get_inst}
-\title{Get instrument ld clump = .001 and pvalue < 5e-8}
+\title{Get instrument}
 \usage{
-get_inst(vcffile, should_write = FALSE)
+get_inst(
+  vcffile,
+  pval = 5e-08,
+  clump = TRUE,
+  r2 = 0.001,
+  kb = 10000,
+  should_write = FALSE
+)
 }
 \arguments{
 \item{vcffile}{the path to the vcffile}
 
-\item{should_write}{if FALSE, simply return the value if TRUE write in the directory}
+\item{pval}{the minimum pvalue of the instruments}
+
+\item{clump}{should clump TRUE or FALSE}
+
+\item{r2}{the maximum ld r2}
+
+\item{kb}{the clumping kilobases}
+
+\item{should_write}{should write (TRUE or FALSE) the instrument in the vcf directory.}
 }
 \value{
 
 }
 \description{
-Get instrument ld clump = .001 and pvalue < 5e-8
+Get instrument
 }

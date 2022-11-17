@@ -4,24 +4,10 @@
 \alias{format_to_coloc}
 \title{Format from TwoSampleMR to coloc}
 \usage{
-format_to_coloc(
-  exp,
-  inst_pQTL,
-  outcome_id,
-  name_outcome,
-  outcome_column = "NA"
-)
+format_to_coloc(dat)
 }
 \arguments{
-\item{exp}{the name of one exposure in the inst_pQTL object to analyse.}
-
-\item{inst_pQTL}{the inst_pqtl with all exposures}
-
-\item{outcome_id}{if "NA" then will use the argument name outcome to determine the outcome object}
-
-\item{name_outcome}{the name as character of the outcome object}
-
-\item{outcome_column}{The name that will go in the column "outcome". If outcome_id == "NA" then the name is used for the name of the outcome object}
+\item{dat}{harmonised dataset with one single exposure and outcome.}
 }
 \value{
 the posterior probability of colocalisation

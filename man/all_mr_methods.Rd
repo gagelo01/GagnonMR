@@ -8,7 +8,8 @@ all_mr_methods(
   dat,
   SignifThreshold = 0.05,
   Primary_mr = "default",
-  short = FALSE
+  short = FALSE,
+  skip_presso = FALSE
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ The fixed-effect model ("fixed") sets the residual standard error to be 1. The "
 The "random_underdispersion" is the default method in TwoSampleMR.}
 
 \item{short}{if TRUE only runs egger, weighted mode median and egger if FALSE runs the rest}
+
+\item{skip_presso}{default FALSE. will run MR presso. If True won't run MR presso. MR presso takes load of memory.}
 }
 \value{
 a data.frame with results of sensitivity analysis.

@@ -130,7 +130,7 @@ prepare_for_mvmr<- function (exposure_dat, d1, clump_r2 = 0.001, clump_kb = 1000
       temp <- subset(temp, !duplicated(SNP))
     }
     inst_all_clump = ieugwasr::ld_clump(data.frame(rsid=temp$SNP,pval=temp$pval.exposure, id = temp$id.exposure),
-                                        clump_kb=10000,clump_r2=0.001,
+                                        clump_kb=clump_kb,clump_r2=clump_r2,
                                         plink_bin=genetics.binaRies::get_plink_binary(),
                                         bfile="/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs")
     exposure_dat <- subset(exposure_dat, SNP %in%     inst_all_clump$rsid)
@@ -159,7 +159,7 @@ prepare_for_mvmr<- function (exposure_dat, d1, clump_r2 = 0.001, clump_kb = 1000
 #' Perform mmvmr ivw and all mvmr robust analyses in MendelianRandomization
 #'
 #' @param exposure_outcome_harmonized the output from TwoSampleMR::mv_harmonise_data
-#' @param pheno_cov_exp
+#' @param pheno_cov_exp the phenotype covariance of the exposure
 #' @param only_IVW whether to perform only to perform IVW
 #'
 #' @return a data.frame with the results of all the models
@@ -170,13 +170,13 @@ mv_multiple_MendelianRandomization <- function(exposure_outcome_harmonized, phen
                                                bxse = x$exposure_se, by = x$outcome_beta, byse = x$outcome_se,
                                                exposure = colnames(x$exposure_se), outcome = x$outname$outcome)
   mvmr_res <- vector(mode = "list", length = 2)
-  x <- mr_mvivw(object = mriobj, model = "default", robust = FALSE)
+  x <- MendelianRandomization::mr_mvivw(object = mriobj, model = "default", robust = FALSE)
   ivwestimate <- data.frame(exposure = x@Exposure,
                             outcome = x@Outcome, b = x@Estimate,
                             se = x@StdError, lci = x@CILower,
                             uci = x@CIUpper, pval = x@Pvalue,
                             cochranQ = x@Heter.Stat[1], cochranQpval = x@Heter.Stat[2],
-                            nsnp = x@SNPs, method = "Multivariable IVM") %>% as.data.table
+                            nsnp = x@SNPs, method = "Multivariable IVW") %>% as.data.table
 
   sres2  <- obtain_conditionalFstatistics(exposure_outcome_harmonized, pheno_cov_exp)
   if(only_IVW == TRUE) { return(merge(ivwestimate, sres2, by = "exposure", sort = FALSE))}
@@ -192,7 +192,9 @@ mv_multiple_MendelianRandomization <- function(exposure_outcome_harmonized, phen
                                nsnp = x@SNPs, method = "Multivariable Egger Intercept") %>% as.data.table
 
   mvmr_res[[1]] <- MendelianRandomization::mr_mvmedian(object = mriobj)
-  mvmr_res[[2]] <- MendelianRandomization::mr_mvlasso(object = mriobj)
+  mvmr_res[[2]] <- tryCatch(
+    expr = {MendelianRandomization::mr_mvlasso(object = mriobj)   },
+    error = function(e){return(NULL) })
 
   resmvmr  <- lapply(mvmr_res, function(x) {
     res_mvmr <- data.frame(exposure = x@Exposure,
@@ -214,6 +216,7 @@ mv_multiple_MendelianRandomization <- function(exposure_outcome_harmonized, phen
   return(resmvmr)
 }
 
+
 #' Obtain conditional F statistcis using MVMR package from paper PMID: 34338327
 #'
 #' @param exposure_outcome_harmonized the output from TwoSampleMR::mv_harmonise_data
@@ -222,17 +225,15 @@ mv_multiple_MendelianRandomization <- function(exposure_outcome_harmonized, phen
 #' @return A data.frame of F statistics
 #' @export
 obtain_conditionalFstatistics <- function(exposure_outcome_harmonized, pheno_cov_exp = 0) {
-
   mv_harm <- exposure_outcome_harmonized
   F.data <- MVMR::format_mvmr(BXGs = mv_harm$exposure_beta,
                               BYG = mv_harm$outcome_se,
                               seBXGs = mv_harm$exposure_se,
                               seBYG = mv_harm$outcome_se,
                               RSID = mv_harm$exposure_se %>% rownames) %>% setDT
-  data.table::setDF(F.data)
-  mvmrcovmatrix <- matrix(pheno_cov_exp, nrow = 2, ncol = 2) #matrix of R
+  mvmrcovmatrix <- matrix(pheno_cov_exp, nrow = ncol(exposure_outcome_harmonized$exposure_beta), ncol = ncol(exposure_outcome_harmonized$exposure_beta)) #matrix of R
   diag(mvmrcovmatrix) <-  1
-  Xcovmat<- MVMR::phenocov_mvmr(mvmrcovmatrix,F.data[,5:6])
+  Xcovmat<- MVMR::phenocov_mvmr(mvmrcovmatrix,F.data[, .SD,.SDcols = which(grepl("sebetaX", colnames(F.data)))])
   sres2 <- MVMR::strength_mvmr(r_input = F.data, gencov = Xcovmat)
   colnames(sres2) <- colnames(mv_harm$exposure_beta)
   rownames(sres2) <- NULL

@@ -4,7 +4,12 @@
 \alias{get_reverseMR}
 \title{Get reverse MR}
 \usage{
-get_reverseMR(vcffile_exp, vcffile_out, chrompos = NA)
+get_reverseMR(
+  vcffile_exp,
+  vcffile_out,
+  chrompos = NA,
+  parameters = default_param()
+)
 }
 \arguments{
 \item{vcffile_exp}{the path to the exposure vcf.gz file}
@@ -12,6 +17,8 @@ get_reverseMR(vcffile_exp, vcffile_out, chrompos = NA)
 \item{vcffile_out}{the path to the outcome vcf.gz file}
 
 \item{chrompos}{the gene region (dummy variable) only there for consistency with get_uni_cis}
+
+\item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }
 \value{
 a data.table of results

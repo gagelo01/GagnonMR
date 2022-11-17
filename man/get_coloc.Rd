@@ -8,7 +8,8 @@ get_coloc(
   vcffile_exp,
   vcffile_out,
   chrompos,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs"
+  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+  parameters = default_param()
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ get_coloc(
 \item{chrompos}{the genetic region ex : "22:25115489-26127836"}
 
 \item{ldref}{the ld reference panel}
+
+\item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }
 \value{
 

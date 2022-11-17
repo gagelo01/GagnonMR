@@ -28,7 +28,3 @@ A Ballon plot of the primary MR analysis.
 \description{
 This function take as input a data.frame of primary MR analysis and return a balloon plot. credit Nicholas.
 }
-\examples{
-dat_plot <- readRDS("/home/gagelo01/workspace/Projects/Dysbiose_project/Data/Modified/Primary/dat_balloon_plot")
-plot_balloon(dat_plot, bonferroni_threshold = 0.05)
-}

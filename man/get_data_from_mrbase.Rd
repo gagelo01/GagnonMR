@@ -4,18 +4,12 @@
 \alias{get_data_from_mrbase}
 \title{Get vcf file and its index directly from MRBAse}
 \usage{
-get_data_from_mrbase(
-  id,
-  out_wd = "/home/couchr02/Mendel_Commun/Vcffile/MRBase_vcf",
-  nthreads = 3
-)
+get_data_from_mrbase(id, out_wd = "/mnt/sda/gagelo01/Vcffile/MRBase_vcf")
 }
 \arguments{
 \item{id}{the MRBase id}
 
 \item{out_wd}{where to store the data}
-
-\item{nthreads}{the number of threads}
 }
 \value{
 

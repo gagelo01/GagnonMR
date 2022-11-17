@@ -33,22 +33,21 @@ mr_conmix_wrapper <- function (dat) {
 #' The fixed-effect model ("fixed") sets the residual standard error to be 1. The "default" setting is to use a fixed-effect model with 3 genetic variants or fewer, and otherwise to use a random-effects model.
 #' The "random_underdispersion" is the default method in TwoSampleMR.
 #' @param short if TRUE only runs egger, weighted mode median and egger if FALSE runs the rest
+#' @param skip_presso default FALSE. will run MR presso. If True won't run MR presso. MR presso takes load of memory.
 #' @return a data.frame with results of sensitivity analysis.
 #'
 #' @import data.table
 #'
 #' @export
-all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", short = FALSE) {
+all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", short = FALSE, skip_presso = FALSE) {
   dat<-dat[dat$mr_keep == TRUE,]
   if (nrow(dat) == 1) {
-    res <- mr(dat, method_list = c("mr_wald_ratio"))
+    res <- TwoSampleMR::mr(dat, method_list = c("mr_wald_ratio"))
     res$nsnp <- dat$SNP
     res$type_of_test <- "Primary analysis"
     setDT(res)
-    res[, lci := b-(se*1.96)]
-    res[, uci := b+(se*1.96)]
-    res[, id.exposure := NULL]
-    res[, id.outcome := NULL]
+    res$lci<-(res$b-res$se)*1.96
+    res$uci <- (res$b+res$se)*1.96
     return(res)
   }else{
     dat <- data.table::as.data.table(dat)
@@ -57,7 +56,7 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", 
     if(Primary_mr == "random_underdispersion"){ primary_analysis <- "mr_ivw"}
 
     if(Primary_mr == "default") {
-      if(nrow(dat) > 3){
+      if(nrow(dat) > 2){
         primary_analysis <- "mr_ivw"
       } else {
         primary_analysis <- "mr_ivw_fe"
@@ -76,9 +75,10 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", 
                            b = out$beta.hat, se = out$beta.se, pval = pnorm(-abs(out$beta.hat/out$beta.se)) * 2)
     res <- rbind(res, out_raps)
     #MR Presso
-    if(nrow(dat) > 3){
+
+    if(nrow(dat) > 3 && !skip_presso){
       tryCatch({
-        ok<-TwoSampleMR::run_mr_presso(as.data.frame(dat))
+        ok<-TwoSampleMR::run_mr_presso(as.data.frame(dat), NbDistribution = ifelse(nrow(dat)<900, 1000, nrow(dat)+100))
 
 
         if(!is.na(ok[[1]]$`Main MR results`[2, "Sd"])) {
@@ -96,23 +96,23 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", 
         dtf<- ok[[1]]$`Main MR results`[index,]
         data.table::setDT(dtf)
         data.table::setnames(dtf, c("MR Analysis", "Causal Estimate", "Sd", "P-value"), c("Analysis", "b", "se", "pval" ))
-        dtf[, id.exposure := dat$id.exposure[1]]
-        dtf[, id.outcome := dat$id.outcome[1]]
-        dtf[, outcome := dat$outcome[1]]
-        dtf[, exposure := dat$exposure[1]]
-        dtf[, method := paste0("MR-PRESSO (Outlier-corrected)")]
+        dtf$id.exposure <- dat$id.exposure[1]
+        dtf$id.outcome <- dat$id.outcome[1]
+        dtf$outcome <- dat$outcome[1]
+        dtf$exposure <- dat$exposure[1]
+        dtf$method <- "MR-PRESSO (outlier-corrected)"
 
         if(dtf$Analysis == "Outlier-corrected") {
-          dtf[Analysis == "Outlier-corrected",nsnp := numsnp - nsnpremoved]
+          dtf$nsnp <- numsnp - nsnpremoved
         } else {
-          dtf[Analysis == "Raw", nsnp :=  res[res$method == "Inverse variance weighted","nsnp"]]
+          dtf$nsnp <- res[res$method == "Inverse variance weighted","nsnp"]
         }
 
         col <- colnames(res)
         dtf <- dtf[, ..col]
       },
       error=function(cond) {
-        message(cond)
+        message(conditionMessage(cond))
       }
       )
       if(!exists("dtf")){
@@ -123,18 +123,20 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", 
       dtf <- matrix(nrow=0,ncol=ncol(res)) %>% as.data.frame(.) %>% data.table::as.data.table(.)
       colnames(dtf)<-colnames(res)
     }
-    dt <- rbind(res, dtf)
+
+    dt <- rbind(res, dtf[,c("id.exposure", "id.outcome", "outcome",  "exposure", "method", "nsnp", "b", "se", "pval")])
     data.table::setDT(dt)
-    dt[, lci := b-(se*1.96)]
-    dt[, uci := b+(se*1.96)]
-
-
     ####MR-radial
     if(!any(grepl("presso", tolower(dt$method)))){
-      res <- TwoSampleMR::mr(dat, method_list=c("mr_ivw_radial"))
-      dt <- rbindlist(list(dt, res), fill = TRUE)
+      tryCatch({
+        res <- TwoSampleMR::mr(dat, method_list = c("mr_ivw_radial"))
+        dt <- rbindlist(list(dt, res), fill = TRUE)
+      }, error = function(cond) {
+        message(conditionMessage(cond))
+      })
     }
-
+    dt$lci <- dt$b-(dt$se*1.96)
+    dt$uci <- dt$b+(dt$se*1.96)
     #contamination mixture
     tryCatch({ #this condition is not very good, but I do not have anything better for the moment
       conmixres <- GagnonMR:::mr_conmix_wrapper(dat)
@@ -142,7 +144,7 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", 
       conmixres[, "id.outcome"] <- dt[1,"id.outcome"]
     },
     error=function(cond) {
-      message(cond)
+      message(conditionMessage(cond))
     }
     )
     if(!exists("conmixres")){
@@ -156,7 +158,7 @@ all_mr_methods <- function(dat, SignifThreshold = 0.05, Primary_mr = "default", 
       ifelse(. %in% c("Weighted mode", "Weighted median"), "Consensus methods", .) %>%
       ifelse(. %in% c("Robust adjusted profile score (RAPS)", "MR Egger", "Contamination mixture"), "Pleiotropy test", .) %>%
       ifelse(grepl("MR-P|radial", .), "Outlier-robust methods", .)
-    result[,type_of_test := type_of_test]
+    result$type_of_test <- type_of_test
     return(result)
   }
 }

@@ -8,7 +8,8 @@ get_uni_cis(
   vcffile_exp,
   vcffile_out,
   chrompos,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs"
+  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+  parameters = default_param()
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ get_uni_cis(
 \item{chrompos}{the gene region e.g. 1:30000-40000}
 
 \item{ldref}{the path to the ldreference panel}
+
+\item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }
 \value{
 a data.table of results

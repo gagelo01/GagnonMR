@@ -9,9 +9,6 @@
 #' @param bonferroni_threshold the pvalue threshold of significance you want to use.
 #' @param subdivide_by_category if TRUE will divide by category. If FALSE won't
 #' @return A Ballon plot of the primary MR analysis.
-#' @examples
-#' dat_plot <- readRDS("/home/gagelo01/workspace/Projects/Dysbiose_project/Data/Modified/Primary/dat_balloon_plot")
-#' plot_balloon(dat_plot, bonferroni_threshold = 0.05)
 #' @export
 plot_balloon <- function(dat_plot, bonferroni_threshold = 0.05, subdivide_by_category = TRUE) {
 
@@ -93,7 +90,7 @@ plot_balloon <- function(dat_plot, bonferroni_threshold = 0.05, subdivide_by_cat
                           midpoint = 0
     ) +
     ggplot2::scale_shape_manual(name = "", values = c(4,1)) +
-    ggplot2::scale_size(name = expression(-Log[10](P)), range = c(4,10)) +
+    ggplot2::scale_size(name = expression(-Log[10](P)), range = c(4,7)) +
     ggplot2::coord_fixed(clip = "off", ratio = 1) +
     ggplot2::guides(size = guide_legend(order = 1),
            shape = guide_legend(order = 2)) +

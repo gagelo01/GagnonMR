@@ -8,8 +8,8 @@ get_multicis(
   vcffile_exp,
   vcffile_out,
   chrompos,
-  clumping_treshold = 0.6,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs"
+  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+  parameters = default_param()
 )
 }
 \arguments{
@@ -19,9 +19,9 @@ get_multicis(
 
 \item{chrompos}{the gene region e.g. 1:30000-40000}
 
-\item{clumping_treshold}{the clumping threshold to do the analysis}
-
 \item{ldref}{the path to the ldreferene panel}
+
+\item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }
 \value{
 a data.table of the results

@@ -1,73 +1,3 @@
-#' get ld from ldlink
-#'
-#' @param SNP the list of rsids you want to have the proxies from
-#'
-#' @return the data.frame of proxies
-#' @export
-
-LD_proxy_wrapper <- function(SNP) {
-
-  if (file.exists("combined_query_snp_list.txt")) {
-    file.remove("combined_query_snp_list.txt")
-  }
-
-
-  LDlinkR::LDproxy_batch(snp = unique(SNP), token = Sys.getenv("LDLINK_TOKEN"),
-                         append = TRUE)
-  combined_query <- fread("combined_query_snp_list.txt")
-
-return(combined_query)
-}
-
-#' Title
-#'
-#' @param gwas_file dah
-#' @param snp_col dah
-#' @param outcome_name dag
-#' @param beta_col dah
-#' @param se_col dah
-#' @param pval_col dah
-#' @param eaf_col dah
-#' @param effect_allele_col dah
-#' @param other_allele_col dah
-#' @param ncase_col dah
-#' @param ncontrol_col dah
-#' @param samplesize_col dah
-#' @param units_col dah
-#' @param prevalence_col dag
-#'
-#' @return
-#' @export
-
-fromdisease_tooutcome <- function (gwas_file, snp_col, outcome_name,
-                                   beta_col, se_col, pval_col, eaf_col, effect_allele_col, other_allele_col,
-                                   ncase_col = "ncase", ncontrol_col = "ncontrol", samplesize_col = "samplesize",
-                                   units_col, prevalence_col)
-{
-
-  disease <- fread(gwas_file)
-  disease[, Phenotype := outcome_name]
-  disease[, ncase := as.numeric(ncase_col)]
-  disease[, ncontrol := as.numeric(ncontrol_col) ]
-  disease[, samplesize := as.numeric(samplesize_col)]
-  disease[, units := "log odds"]
-
-  disease_outcome <- TwoSampleMR::format_data(disease,
-                                 type = "outcome",
-                                 snp_col = snp_col,
-                                 beta_col = beta_col,
-                                 se_col = se_col,
-                                 pval_col = pval_col,
-                                 eaf_col = eaf_col,
-                                 effect_allele_col = effect_allele_col,
-                                 other_allele_col = other_allele_col)
-  setDT(disease_outcome)
-  disease_outcome[ , prevalence.outcome := prevalence_col]
-  return(disease_outcome)
-}
-
-
-
 #' Title remove SNPs close to pleiotropic gene region
 #'
 #' @param inst you instrument data.frame
@@ -105,5 +35,24 @@ for(i in 1:nrow(region_df)) {
 return(inst)
 }
 
-#multi-cis
+#' In TwoSampleMR format convert exposure to outcome
+#'
+#' @param exposure_dat A TwoSampleMR data.frame
+#'
+#' @return
+#' @export
+#'
+#' @examples
+convert_exposure_to_outcome <- function (exposure_dat) {
+  id <- subset(exposure_dat, !duplicated(exposure), select = c(exposure,
+                                                               id.exposure))
+  outcome_dat <- TwoSampleMR::format_data(exposure_dat, beta_col = "beta.exposure", type = "outcome",
+                                          se_col = "se.exposure", pval_col = "pval.exposure", phenotype_col = "exposure",
+                                          effect_allele_col = "effect_allele.exposure", other_allele_col = "other_allele.exposure",
+                                          eaf_col = "eaf.exposure", units_col = "units.exposure")
+  outcome_dat <- base::merge(outcome_dat, id, by.x = "outcome", by.y = "exposure")
+  outcome_dat <- subset(outcome_dat, select = -c(id.outcome))
+  names(outcome_dat)[names(outcome_dat) == "id.exposure"] <- "id.outcome"
+  return(outcome_dat)
+}
 

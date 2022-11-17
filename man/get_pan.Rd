@@ -8,7 +8,8 @@ get_pan(
   vcffile_exp,
   vcffile_out,
   ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
-  chrompos = NA
+  chrompos = NA,
+  parameters = default_param()
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ get_pan(
 \item{ldref}{the path to the ldreference panel}
 
 \item{chrompos}{the genetic region (only a dummy variable to make consitent form with get_uni_cis)}
+
+\item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }
 \value{
 a data.table of pan anaysis

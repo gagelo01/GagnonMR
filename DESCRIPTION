@@ -20,16 +20,11 @@ Imports:
     data.table,
     MRInstruments,
     varhandle,
-    readxl,
-    parallel,
-    foreach,
-    doParallel,
     MendelianRandomization,
     ieugwasr,
     magrittr,
     dplyr,
     grid,
-    LDlinkR,
     biomaRt,
     qvalue,
     coloc,
@@ -46,8 +41,5 @@ Imports:
     susieR,
     hyprcoloc,
     purrr,
-    furrr,
     stringr,
     MVMR
-Depends: 
-    tidyverse

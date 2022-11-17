@@ -8,7 +8,7 @@ get_susie(
   vcffile,
   chrompos,
   ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
-  L = 10
+  parameters = default_param()
 )
 }
 \arguments{
@@ -18,7 +18,7 @@ get_susie(
 
 \item{ldref}{th ld reference panel}
 
-\item{L}{the maximum number of causal variants}
+\item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }
 \value{
 an object of class susie

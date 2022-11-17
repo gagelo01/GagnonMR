@@ -63,7 +63,7 @@ harmonize_gwassumstat_with_instrument(
 a data.frame of harmonised data.
 }
 \description{
-inst_IBD <- fread("/mnt/sde/gagelo01/Projects/Dysbiose_project/Data/Modified/Instruments/inst_IBD")
+inst_IBD <- fread("/mnt/sda/gagelo01/Projects/Dysbiose_project/Data/Modified/Instruments/inst_IBD")
 harmonize_gwassumstat_with_instrument( inst = "inst_IBD",
 action = 1,
 gwas_file = "/home/couchr02/Mendel_Commun/Christian/GWAS/40_diseases/CAD_META.gz",

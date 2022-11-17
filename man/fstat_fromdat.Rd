@@ -4,10 +4,10 @@
 \alias{fstat_fromdat}
 \title{Calculate Fstat from harmonised data with rsquared}
 \usage{
-fstat_fromdat(dat)
+fstat_fromdat(dat_split)
 }
 \arguments{
-\item{dat}{harmonised data}
+\item{dat_split}{list of harmonised data}
 }
 \value{
 a value that is the instrument Fstat

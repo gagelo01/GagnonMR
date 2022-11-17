@@ -12,15 +12,13 @@ get_eQTL(
  
     gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt"),
  
-    vcf_file = "/mnt/sde/pernic01/eQTL/GTEx8/genotypes/geno_693Indiv_maf_0.01_chr1_22.vcf.gz",
+    vcf_file = "/mnt/sda/pernic01/eQTL/GTEx8/genotypes/geno_693Indiv_maf_0.01_chr1_22.vcf.gz",
  
     expr_mat_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/GTEx_EUR_Analysis_v8_eQTL_expression_matrices/",
     tissue, ".v8.normalized_expression_EUR_chr1_22.bed"),
  
     cov_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/Covariates_GTEx8_EUR/",
-    tissue, "_covariates_GTEx8_EUR.txt"),
-  ensembl_human = biomaRt::useEnsembl(biomart = "genes", dataset =
-    "hsapiens_gene_ensembl")
+    tissue, "_covariates_GTEx8_EUR.txt")
 )
 }
 \arguments{
@@ -32,11 +30,13 @@ get_eQTL(
 
 \item{mythreshold}{Which p value threshold to use}
 
-\item{gencode}{the path to the gencode file}
+\item{gencode}{the GTEX v8 dictionnary of ensembl gene used.}
 
 \item{vcf_file}{the path to the vcf file}
 
-\item{temp_dir}{the path to the temporary directory whare all files will at the end of the process get erased.}
+\item{expr_mat_file}{expression matrices. column are subjects, and row is their expression for each gene}
+
+\item{cov_file}{the covariate file}
 }
 \value{
 a data.frame

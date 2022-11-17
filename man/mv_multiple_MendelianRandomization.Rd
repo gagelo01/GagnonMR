@@ -6,11 +6,16 @@
 \usage{
 mv_multiple_MendelianRandomization(
   exposure_outcome_harmonized,
-  pheno_cov_exp = 0
+  pheno_cov_exp = 0,
+  only_IVW = FALSE
 )
 }
 \arguments{
 \item{exposure_outcome_harmonized}{the output from TwoSampleMR::mv_harmonise_data}
+
+\item{pheno_cov_exp}{the phenotype covariance of the exposure}
+
+\item{only_IVW}{whether to perform only to perform IVW}
 }
 \value{
 a data.frame with the results of all the models

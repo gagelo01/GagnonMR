@@ -7,7 +7,7 @@
 format_gtex_data(
   exposures,
  
-    translation = fread("/mnt/sde/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"),
+    translation = fread("/mnt/sda/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"),
  
     gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt")
 )

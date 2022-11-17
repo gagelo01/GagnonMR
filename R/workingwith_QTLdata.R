@@ -26,10 +26,9 @@ calculate_multicis_mr <- function(inst_pqtl, outcome, ldmat ) {
     harm_all<-harm_all[order(match(SNP, goodsnporder))]
     if(nrow(harm_all) == 1) {
       return(res_multicis)
-      break()
     }
     ##harmonise same order as ldmat
-    list_harmonised <- TwoSampleMR:::harmonise_ld_dat(x = harm_all, ld = ldmat)
+    list_harmonised <- TwoSampleMR::harmonise_ld_dat(x = harm_all, ld = ldmat)
     harm_all <- list_harmonised$x
     ldmat <- list_harmonised$ld
 
@@ -76,9 +75,10 @@ calculate_multicis_mr <- function(inst_pqtl, outcome, ldmat ) {
 #' @param gene From which gene do you want to extract the data exemple SULT1A1
 #' @param mywindow Which window to use
 #' @param mythreshold Which p value threshold to use
-#' @param gencode the path to the gencode file
+#' @param gencode the GTEX v8 dictionnary of ensembl gene used.
 #' @param vcf_file the path to the vcf file
-#' @param temp_dir the path to the temporary directory whare all files will at the end of the process get erased.
+#' @param expr_mat_file expression matrices. column are subjects, and row is their expression for each gene
+#' @param cov_file the covariate file
 #'
 #' @return a data.frame
 #' @export
@@ -88,28 +88,20 @@ get_eQTL<- function(tissue,
                     mywindow = 1e6,
                     mythreshold = 1,
                     gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt"),
-                    vcf_file = "/mnt/sde/pernic01/eQTL/GTEx8/genotypes/geno_693Indiv_maf_0.01_chr1_22.vcf.gz",
+                    vcf_file = "/mnt/sda/pernic01/eQTL/GTEx8/genotypes/geno_693Indiv_maf_0.01_chr1_22.vcf.gz",
                     expr_mat_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/GTEx_EUR_Analysis_v8_eQTL_expression_matrices/",
                                            tissue,".v8.normalized_expression_EUR_chr1_22.bed"), #expression matrices. column are subjects, and row is their expression for each gene
                     cov_file = paste0("/home/couchr02/Mendel_Commun/Nicolas/GTEx_V8/Covariates_GTEx8_EUR/",
-                                      tissue,"_covariates_GTEx8_EUR.txt"),
-                    ensembl_human = biomaRt::useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl") ) {
+                                      tissue,"_covariates_GTEx8_EUR.txt")) {
 
 
-  gencode_small = gencode[which(gencode$gene_name %in% gene),]
-  if(nrow(gencode_small)==0){
-    gencode_small <- biomaRt::getBM(attributes = c("chromosome_name", "start_position", "end_position", "ensembl_gene_id", "hgnc_symbol"),
-                                    filters = "hgnc_symbol", values = gene,
-                                    mart = ensembl_human) %>% as.data.table(.)
-    gencode_small <- gencode_small[chromosome_name %in% 1:22, ]
-    colnames(gencode_small) <- c("chr", "start", "end","gene_id","gene_name")
-  }
+
+  gencode_small <- gencode[gene_name == gene, .(chr, start = min(start), end =max(end), gene_id, gene_name) ] %>% dplyr::distinct(.)
+  gencode_small <- gencode_small[chr %in% 1:22, ]
 
   if(nrow(gencode_small)==0){
     return(data.table(tissue = tissue,
-                      probe =  biomaRt::getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),
-                                              filters = "hgnc_symbol", values = gene,
-                                              mart = ensembl_human) %>% .$ensembl_gene_id))
+                      hgncgene = gene))
   }
 
   gene_id = unique(gencode_small$gene_id)
@@ -127,6 +119,7 @@ get_eQTL<- function(tissue,
   colnames(matr)[grep("GTEX-", colnames(matr))] = paste(colnames(matr)[grep("GTEX-", colnames(matr))],
                                                         colnames(matr)[grep("GTEX-", colnames(matr))], sep = "_")
 
+  dir.create(tempdir())
   temp_file <- tempfile()
   fwrite(matr,paste0(temp_file,".bed"),sep="\t",quote=F,row.names=F)
 
@@ -177,9 +170,7 @@ get_eQTL<- function(tissue,
 
   path_qtl <- paste0(temp_file, "out.txt")
   if(!file.exists(path_qtl)) { return(data.table(tissue = tissue,
-                                                 probe =  biomaRt::getBM(attributes = c("hgnc_symbol", "ensembl_gene_id"),
-                                                                         filters = "hgnc_symbol", values = gene,
-                                                                         mart = ensembl_human) %>% .$ensembl_gene_id))}
+                                                 hgncgene = gene))}
   QTL <- fread(path_qtl)
   QTL <- QTL[sub("\\..*", "", V1) %in% gencode_small[, sub("\\..*", "", unique(gene_id))]] #make sure that even from ensembl it fits
 
@@ -217,6 +208,7 @@ get_eQTL<- function(tissue,
   unlink(mycovar)
   unlink(path_qtl)
   unlink(temp_file)
+  unlink(tempdir(), recursive = TRUE)
 
   return(QTL)
 }
@@ -230,7 +222,7 @@ get_eQTL<- function(tissue,
 #' @return
 #' @export
 format_gtex_data <- function(exposures,
-                             translation = fread("/mnt/sde/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"),
+                             translation = fread("/mnt/sda/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"),
                              gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt")) {
   setnames(gencode, "gene_id", "ensembl_gene_id", skip_absent = TRUE)
   data_eQTL <- separate(exposures, col = "variant", into = c("chr_todump", "pos_todump", "Allele1", "Allele2", "buildtodump"))
@@ -271,49 +263,19 @@ format_gtex_data <- function(exposures,
 
 #' Format from TwoSampleMR to coloc
 #'
-#' @param exp the name of one exposure in the inst_pQTL object to analyse.
-#' @param inst_pQTL the inst_pqtl with all exposures
-#' @param outcome_id if "NA" then will use the argument name outcome to determine the outcome object
-#' @param name_outcome the name as character of the outcome object
-#' @param outcome_column The name that will go in the column "outcome". If outcome_id == "NA" then the name is used for the name of the outcome object
-#'
+#' @param dat harmonised dataset with one single exposure and outcome.
 #'
 #' @return the posterior probability of colocalisation
 #' @export
-format_to_coloc <- function(exp, inst_pQTL, outcome_id, name_outcome, outcome_column = "NA") {
+format_to_coloc <- function(dat) {
 
-  inst_pqtl <- get(inst_pQTL)
-  dt_exposure<-inst_pqtl[exposure == exp,]
-
-  #outcome
-  if(outcome_id == "NA"){
-    dt_outcome <- get(name_outcome)
-    dt_outcome <- dt_outcome[SNP %in% dt_exposure$SNP,]
-    dt_outcome <- dt_outcome[outcome %in% outcome_column, ]
-    name_outcome<-dt_outcome[1,]$outcome
-  } else {
-    dt_outcome<- TwoSampleMR::extract_outcome_data(outcomes = outcome_id, snps = dt_exposure$SNP, proxies = FALSE)
-  }
-
-  dat <- harmonise_data(dt_exposure, dt_outcome, action=1)
   setDT(dat)
-  mypossnp <- dat[exposure == exp]$pos.exposure
-
-  if(length(mypossnp)== 0) {
-    if(dat[, max(pos.exposure) - min(pos.exposure)] > 2*10^6) {
-      return("not sure how to select the region")
-    }
-
-    dat_window <- dat
-  } else {
-    window<-1*10^6
-    dat_window <- dat[(pos.exposure >= mypossnp-window) & (pos.exposure <= mypossnp+window),]
-  }
-
+  mypossnp <- dat$pos.exposure
+  dat_window <- dat
   toselect <- dat_window[,complete.cases(.SD), .SDcols = c("beta.exposure", "se.exposure", "samplesize.exposure", "beta.outcome", "se.outcome", "samplesize.outcome")]
   dat_window<-dat_window[toselect,]
   dat_window <- distinct(dat_window)
-  if(dt_outcome[1,]$units.outcome != "log odds") {
+  if(dat_window[1,]$units.outcome != "log odds") {
     type <- "quant"
     s<-0.99999
   } else {
@@ -357,6 +319,7 @@ format_to_coloc <- function(exp, inst_pQTL, outcome_id, name_outcome, outcome_co
 
 }
 
+
 #' Calculate coloc
 #'
 #' @param list_dataset the list of dataset
@@ -374,115 +337,6 @@ calculate_coloc_from_list_dataset <- function(list_dataset, exp, name_outcome) {
                       posprob_coloc.mr = res_coloc)
 
 }
-
-
-
-#' Title
-#'
-#' @param SOMAmerID the SOMAmerID
-#' @param genecard_name the name of the Gene. exemple GSTA1
-#' @param window The window. note that 2e5 window means the function will return the SNP 1e5 KB upstream and 1e5KB downstream of the gene coding region
-#' @param minimum_maf the minimum maf SNP you want to include (default 0.01)
-#' @param gencode_chr the name in character of the gencode. load gencode prior to running the function gencode <- data.table::fread("/home/couchr02/Mendel_Commun/Nicolas/GTEx/gencode.v19.genes.v7.patched_contigs.txt")
-#' @param traduction_chr the name in character of the traduction data.table. load traduction prior to running the function traduction <-  fread("/mnt/sde/couchr02/1000G_Phase3/1000G_Phase3_b37_rsid_maf.txt")
-#' @param ensembl to convert to genecard name
-#' @param type if cis selection only cis
-#' @param path_sun the path towards the sun data
-
-#'
-#' @return
-#' @export
-
-extract_all_cis_instrument_sun <- function(genecard_name = NULL, SOMAmerID = NULL, window = 1e6,
-                                           minimum_maf =0.001, gencode_chr="gencode", traduction_chr="traduction",
-                                           ensembl = useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice" ,dataset="hsapiens_gene_ensembl"),
-                                           type = "cis", path_sun = "/home/couchr02/Mendel_Commun/dbs_Web/meta_filtered_final") {
-
-  conversion <- readxl::read_excel("/home/gagelo01/workspace/Projects/small_MR_exploration/Plasma_proteome/Data/Raw/media-1.xlsx", sheet = 2, skip = 2) %>% as.data.table(.)
-
-  if(!is.null(genecard_name)){
-    SOMAmerID <- conversion[EntrezGeneSymbol == genecard_name, ID]
-  }
-
-  if(!is.null(SOMAmerID)){
-    genecard_name<-conversion[ID == SOMAmerID, EntrezGeneSymbol]
-    genecard_name <- sub(".", "_", genecard_name, fixed = TRUE) %>% strsplit(., "_") %>% unlist
-  }
-  if(is.character(gencode_chr)) {gencode  <- get(gencode_chr)}  else {gencode <- gencode_chr}
-  if(is.character(traduction_chr))  {traduction <- get(traduction_chr)} else {traduction<-traduction_chr}
-  gene_coords <-gencode[gene_name %in% genecard_name,]
-  if(nrow(gene_coords) == 0) {
-    gene_coords <- biomaRt::getBM(attributes = c("hgnc_symbol","chromosome_name", "start_position", "end_position"),
-                                  filters = "hgnc_symbol", values = genecard_name,
-                                  mart = ensembl) %>% as.data.table(.)
-    gene_coords <- gene_coords[chromosome_name %in% 1:22,]
-    colnames(gene_coords)<-c("gene_name", "chr", "start", "end")
-  } else {
-    gene_coords[, start := min(start)]
-    gene_coords[, end := max(end)]
-    gene_coords[,gene_name := paste0(unique(gene_name, collapse = "-"))]
-    gene_coords <- gene_coords %>% distinct(.)}
-
-  name_dir_prot <- SOMAmerID
-
-  sun <- fread(paste0(path_sun, "/",name_dir_prot, "/", name_dir_prot, "_chrom_", gene_coords$chr[1], "_meta_final_v1.tsv"))
-  setnames(sun, "log(P)", "log_p")
-  sun[, p:=exp(log_p)]
-
-  if(type == "pan") {
-    sun_list<-vector(mode="list", length=22)
-    for(i in 1:22) {
-      sun_list[[i]]<-fread(paste0(path_sun, "/",name_dir_prot, "/", name_dir_prot, "_chrom_", i, "_meta_final_v1.tsv"))
-    }
-    sun_full<-rbindlist(sun_list)
-    setnames(sun_full, "log(P)", "log_p")
-    sun_full[, p:=exp(log_p)]
-    sun_trans <-  sun_full[chromosome != gene_coords$chr[1] & p<5e-8,]
-    sun <- rbind(sun, sun_trans)
-  }
-
-
-  #getrsisd
-  #in which imputed variants had the same genomic position (GRCh37) and alleles
-  traduction[,chr:=as.integer(chr)]
-  traduction[,pos:=as.integer(position)]
-  sun <- merge(sun, traduction, by.x = c("chromosome", "position"), by.y = c("chr", "position"))
-  sun[,a0 := tolower(a0)]
-  sun[,a1 := tolower(a1)]
-  #eaf
-  sun<-sun[Allele1 == a0 | Allele1 == a1,]
-  sun[, eaf := ifelse(Allele1 == a0, EUR, 1-EUR)]
-
-  #transform  cis-trans
-  gene_coords[, start_cis := (start - window/2) %>% ifelse(.<1, 1, .) ]
-  gene_coords[, end_cis := end + window/2]
-  sun <- cbind(sun, gene_coords[,.(start_cis, end_cis)])
-  sun[, pqtl_type := ifelse( (position > start_cis) & (position < end_cis), "cis", "trans")]
-  sun <- sun[, -c("a0", "a1", "EUR" ,"maf", "start_cis", "end_cis" )]
-  sun[,Phenotype := paste0("sun_",   gene_coords[1,gene_name])]
-  sun<-distinct(sun)
-  sun[, maf := ifelse(eaf > 0.5, 1-eaf, eaf)]
-  sun[maf> minimum_maf,]
-  sun[rsid %in% sun[, .N , by ="rsid"][N > 1,]$rsid, ] #many snp with different maf
-  sun[, N := 3301]
-  if(type=="cis") {sun <- sun[pqtl_type == "cis",]}
-  if(type=="pan") {sun <- sun[pqtl_type == "cis" | (pqtl_type == "trans" & p<5e-8)]}
-  sun_format <-TwoSampleMR::format_data(sun,
-                                        type="exposure",
-                                        snp_col="rsid",
-                                        phenotype_col = "Phenotype",
-                                        beta_col="Effect",
-                                        effect_allele_col="Allele1",
-                                        other_allele_col="Allele2",
-                                        se_col="StdErr",
-                                        pval_col="p",
-                                        chr_col = "chromosome",
-                                        pos_col = "position",
-                                        samplesize_col = "N")
-  sun_format <- merge(sun_format, sun[, .(rsid, pqtl_type)], by.x = "SNP", by.y = "rsid", all.y = FALSE)
-  return(sun_format)
-}
-
 
 #' a wrapper GagnonMR::calculate_multicis_mr for pmap
 #'

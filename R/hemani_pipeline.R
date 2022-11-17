@@ -1,3 +1,51 @@
+#' get hgnc nomenclature from uniprot id assessing multiple nomenclature c("uniprotswissprot", "uniprot_gn_id", "uniprot_gn_symbol", "uniprot_isoform",  "uniprotsptrembl") and NCBI database
+#' @param uniprot_vec A vector of Uniprot ID
+#' @param ensembl ensembl database
+#' @param uniprot_dictionnary uniprot dictionnary downloaded from NCBI
+#'
+#' @return a data.table of uniprot and hgnc_id
+#' @export
+from_uniprot_to_hgnc <- function(uniprot_vec,
+                                 ensembl = biomaRt::useMart("ensembl", dataset="hsapiens_gene_ensembl"),
+                                 uniprot_dictionnary = fread("/mnt/sda/boujer01/Drug_Targets/Uniprot_ID/uniprot_final.txt")) {
+
+  colnames(uniprot_dictionnary)<- c("uniprot", "gene_name", "n_aa")
+  uniprot_filters <- c("uniprotswissprot", "uniprot_gn_id", "uniprot_gn_symbol", "uniprot_isoform",  "uniprotsptrembl")
+  uniprot_biomart <- data.table(hgnc_symbol = "hgnc_symbol", uniprot_gn_id = "uniprot_gn_id")
+  for(i in 1:length(uniprot_filters)) {
+    values <- uniprot_vec[!(uniprot_vec %in% uniprot_biomart$uniprot_gn_id)]
+    if(length(values)>0){
+    k <- biomaRt::getBM(attributes=c(uniprot_filters[i], "hgnc_symbol"),
+                        filters =  uniprot_filters[i] , values=values, mart=ensembl)
+    setDT(k)
+    setnames(k, uniprot_filters[i], "uniprot_gn_id")
+    uniprot_biomart <- rbind(uniprot_biomart, k)
+    }
+  }
+  values <- uniprot_vec[!(uniprot_vec %in% uniprot_biomart$uniprot_gn_id)]
+if(length(values)>0) {
+  vec_res <- vector(mode = "list", length = length(values))
+  for(i in 1:length(values)) {
+    x  <- uniprot_dictionnary[grepl(gsub(" ", "|", values[i],),uniprot),] #gsub("-.*", "",values[i])
+    x[,uniprot_gn_id := values[i]]
+    setnames(x, "gene_name",c("hgnc_symbol"))
+    x <- distinct(x[, .(hgnc_symbol, uniprot_gn_id)]) %>% as.data.table(.)
+    x[, hgnc_symbol := paste(hgnc_symbol, collapse = " ")]
+    vec_res[[i]] <- distinct(x[, .(hgnc_symbol, uniprot_gn_id)]) %>% as.data.table(.)
+  }
+  dt_res <- rbindlist(vec_res)
+  uniprot_biomart <- rbind(uniprot_biomart, dt_res)
+}
+  uniprot_biomart <- uniprot_biomart[!(hgnc_symbol == "hgnc_symbol"),]
+  uniprot_biomart <- uniprot_biomart[hgnc_symbol != "",]
+
+  double_hgnc <-uniprot_biomart[, .N, by = "uniprot_gn_id"][N>1]$uniprot_gn_id
+  uniprot_biomart[ , hgnc_symbol := unique(paste(hgnc_symbol, collapse = " ")), by = "uniprot_gn_id"]
+  uniprot_biomart <- distinct(uniprot_biomart) %>% as.data.table(.)
+
+  return(uniprot_biomart)
+}
+
 #' Title
 #'
 #' @param genecard_name A vector the names of the gene genecard name
@@ -8,44 +56,47 @@
 #' @return
 #' @export
 
-from_genecard_to_generegion <- function(genecard_name, window = 1e6,
-                                        gencode = data.table::fread("/home/couchr02/Mendel_Commun/Nicolas/GTEx/gencode.v19.genes.v7.patched_contigs.txt"),
-                                        ensembl = biomaRt::useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org", path="/biomart/martservice" ,dataset="hsapiens_gene_ensembl")) {
-
-  genecard_name <- genecard_name %>% strsplit(., split = "\\.|,") %>% unlist
-  gene_coords <-gencode[gene_name %in% genecard_name,]
-
-  if(!all(genecard_name %in% gene_coords$gene_name) | nrow(gene_coords) == 0) {
-    gene_coords_mart <- biomaRt::getBM(attributes = c("hgnc_symbol","chromosome_name", "start_position", "end_position"),
-                                       filters = "hgnc_symbol", values = genecard_name[!(genecard_name %in% gene_coords$gene_name)],
-                                       mart = ensembl) %>% as.data.table(.)
-    gene_coords_mart <- gene_coords_mart[chromosome_name %in% 1:22,]
-    colnames(gene_coords_mart)<-c("gene_name", "chr", "start", "end")
-    gene_coords <- rbindlist(list(gene_coords, gene_coords_mart), fill = TRUE)
+from_genecard_to_generegion <- function(genecard_name, window = 1e+06, gencode = data.table::fread("/home/couchr02/Mendel_Commun/Nicolas/GTEx/gencode.v19.genes.v7.patched_contigs.txt"),
+                                        ensembl = biomaRt::useMart(biomart = "ENSEMBL_MART_ENSEMBL",
+                                                                   host = "grch37.ensembl.org", path = "/biomart/martservice",
+                                                                   dataset = "hsapiens_gene_ensembl"))
+{
+  genevec <- genecard_name %>% strsplit(., split = " ") %>% unlist(.)
+  gene_coords <- gencode[gene_name %in% genevec, ]
+  if (!all(genevec %in% gene_coords$gene_name) | nrow(gene_coords) ==  0) {
+    gene_coords_mart <- biomaRt::getBM(attributes = c("hgnc_symbol",
+                                                      "chromosome_name",
+                                                      "start_position",
+                                                      "end_position"),
+                                       filters = "hgnc_symbol",
+                                       values = genevec[!(genevec %in% gene_coords$gene_name)], mart = ensembl) %>%
+      as.data.table(.)
+    # gene_coords_mart <- gene_coords_mart[chromosome_name %in%  1:22, ]
+    colnames(gene_coords_mart) <- c("gene_name", "chr", "start","end")
+    gene_coords <- rbindlist(list(gene_coords, gene_coords_mart),
+                             fill = TRUE)
   }
-  gene_coords[, start := min(start), by = "gene_name"]
-  gene_coords[, end := max(end), by = "gene_name"]
-  gene_coords[,gene_name := paste0(unique(gene_name), collapse = "-"), by = "gene_name"]
+  gene_coords[, `:=`(start, min(start)), by = "gene_name"]
+  gene_coords[, `:=`(end, max(end)), by = "gene_name"]
+  gene_coords[, `:=`(gene_name, paste0(unique(gene_name), collapse = "-")),
+              by = "gene_name"]
   gene_coords <- gene_coords %>% distinct(.)
-  gene_coords <- gene_coords[chr %in% 1:22,]
-
+  # gene_coords <- gene_coords[chr %in% 1:22, ]
   setDT(gene_coords)
-  if(gene_coords[,.N]==0) {  return(NA)} else {
-    gene_coords[, start_cis := (start - window/2) %>% ifelse(.<1, 1, .) ]
-    gene_coords[, end_cis := end + window/2]
-    gene_to_keep <- gene_coords[,length(unique(chr)), by = "gene_name"][V1 == 1]$gene_name
-    gene_region <- gene_coords[gene_name %in% gene_to_keep, paste0(chr, ":", start_cis, "-", end_cis)]
-    names(gene_region) <- gene_coords[gene_name %in% gene_to_keep, gene_name]
+  if (gene_coords[, .N] == 0) {
+    return(NA)
   }
 
-  k <- genecard_name[!(genecard_name %in% gene_coords$gene_name)]
-  vecna <- rep(NA, times = length(k))
-  names(vecna)<-k
-  gene_region <- c(gene_region, vecna)
-  gene_region <- gene_region[genecard_name] #order
+  gene_coords[, start_cis := (start - window/2) %>% ifelse(.<1, 1, .) ]
+  gene_coords[, end_cis := (end + window/2)]
+  gene_region <- sapply(genecard_name, function(x) {
+    k <- gene_coords[gene_name %in% strsplit(x, split = " ")[[1]],]
+    if(nrow(k)==0){return(NA)}
+    gene_region <- k[,paste0(unique(chr), ":", min(start_cis), "-", max(end_cis))]
+    return(gene_region)})
+
   return(gene_region)
 }
-
 
 
 
@@ -100,9 +151,9 @@ formattovcf_createindex <- function(all_out,
                                     chr_col,
                                     pos_col,
                                     units,  #"SD", "log odds", ou autre.
-                                    traduction = fread("/mnt/sde/couchr02/1000G_Phase3/1000G_Phase3_b37_rsid_maf.txt"),
-                                    out_wd = "/mnt/sdf/gagelo01/Vcffile/Server_vcf",
-                                    df_index = fread( "/mnt/sdf/gagelo01/Vcffile/server_gwas_id.txt"),
+                                    traduction = fread("/mnt/sda/couchr02/1000G_Phase3/1000G_Phase3_b37_rsid_maf.txt"),
+                                    out_wd = "/mnt/sda/gagelo01/Vcffile/Server_vcf",
+                                    df_index = fread( "/mnt/sda/gagelo01/Vcffile/server_gwas_id.txt"),
                                     group_name ,
                                     year ,
                                     author ,
@@ -130,9 +181,13 @@ formattovcf_createindex <- function(all_out,
     if( 1 %in% traduction$EUR) {stop("Error: traduction cannot contain 1. You should replace by 0.999")}
   }
   if(grepl(" ", outcome_name)) {stop("Error: outcome_name cannot contain space")}
-  if(should_create_id == FALSE & df_index[,!(ID %in% id)]) {stop("Error: when should_create_id == FALSE, ID must exist in df_index$id")}
+  if(should_create_id == FALSE & df_index[, !any(id %in% ID)]) {stop("Error: when should_create_id == FALSE, ID must exist in df_index$id")}
   if(grepl( "\\W", outcome_name) & !grepl("-", outcome_name)) {stop("Error: outcome_name can only include alphanumeric (upppercase or lowercase), underscore and hyphen")}
   if(!is.null(eaf_col) & !is.null(maf_col)) {stop("Error: if eaf_col is not NULL, then maf_col must be NULL")}
+  k <- all_out[, sapply(.SD, function(x) any(is.na(x)))]
+  if(any(k)){stop(paste0("Error: column --", paste(names(k)[k==TRUE], collapse = "-- and --"), "-- contains NA. Please verify and potentially remove these rows."))}
+  if(!is.null(snp_col) & all_out[,any(!grepl("^rs", get(snp_col)))]) {stop("Error: SNP column contains rsid that do not start by 'rs'")}
+  if(!(is.null(ncase_col)&is.null(ncontrol_col)) & units != "log odds") {stop("Error: When trait is continuous, ncase_col and ncontrol_col should be NULL")}
 
   #including all_out
   all_out[,outcome := outcome_name]
@@ -164,6 +219,7 @@ formattovcf_createindex <- function(all_out,
 
   if(!is.null(traduction)) {
     if(is.null(chr_col)) {all_out <- merge(all_out, traduction, by.x = c("snp"), by.y = c("rsid"), all = FALSE)} else {
+      all_out[,c("chrom", "pos") := lapply(.SD, as.integer), .SDcols = c("chrom", "pos")]
       all_out <- merge(all_out, traduction, by.x = c("chrom", "pos"), by.y = c("chr", "position"), all = FALSE) }
 
     arguments <- data.table::data.table( ao_col = c( "snp_col", "chr_col", "pos_col"),
@@ -232,12 +288,9 @@ formattovcf_createindex <- function(all_out,
 
   system2(command = "mkdir", args = paste0(out_wd, "/", ID))
   VariantAnnotation::writeVcf(all_out_vcf, file=paste0(out_wd, "/", ID, "/",ID, ".vcf"))
-  current_wd<-getwd()
-  setwd(paste0(out_wd, "/", ID))
-  system2(command = "bgzip", args = c("-f", paste0(ID, ".vcf")))
-  system2(command = "tabix", args = c("-f" ,"-p", "vcf", paste0(ID, ".vcf.gz")))
-  setwd(current_wd)
-  if(should_create_id == TRUE){ fwrite(df_index, "/mnt/sdf/gagelo01/Vcffile/server_gwas_id.txt") }
+  system2(command = "bgzip", args = c("-f", paste0(out_wd, "/", ID, "/", ID, ".vcf")))
+  system2(command = "tabix", args = c("-f" ,"-p", "vcf", paste0(out_wd, "/", ID, "/", ID, ".vcf.gz")))
+  if(should_create_id == TRUE){ fwrite(df_index, "/mnt/sda/gagelo01/Vcffile/server_gwas_id.txt") }
   message("This script finished without errors")
 }
 #' Attribute a new id to your new phenotype
@@ -275,20 +328,17 @@ create_id <- function(df) {
 #'
 #' @param id the MRBase id
 #' @param out_wd where to store the data
-#' @param nthreads the number of threads
 #'
 #' @return
 #' @export
 
-get_data_from_mrbase <- function(id, out_wd = "/home/couchr02/Mendel_Commun/Vcffile/MRBase_vcf", nthreads =3) {
-  plan(multisession, workers = nthreads)
-  map(as.list(id), function(x) system2(command = "mkdir", args = c("-p", paste0(out_wd, "/", x))))
-
-  furrr::future_map(as.list(id), function(x)
-    system2(command = "wget", args = c( "-O", paste0(out_wd, "/", x, "/", x, ".vcf.gz"), paste0("https://gwas.mrcieu.ac.uk/files/", x, "/", x, ".vcf.gz"))))
-
-  furrr::future_map(as.list(id), function(x) system2(command = "tabix", args = c("-p", "vcf", paste0(out_wd, "/",x, "/", x, ".vcf.gz"))))
-
+get_data_from_mrbase <- function(id, out_wd = "/mnt/sda/gagelo01/Vcffile/MRBase_vcf") {
+  purrr::map(as.list(id), function(x) {
+    message(paste0("Initializing ", x))
+    system2(command = "mkdir", args = c("-p", paste0(out_wd, "/", x)))
+    system2(command = "wget", args = c( "-O", paste0(out_wd, "/", x, "/", x, ".vcf.gz"), paste0("https://gwas.mrcieu.ac.uk/files/", x, "/", x, ".vcf.gz")))
+    system2(command = "tabix", args = c("-p", "vcf", paste0(out_wd, "/",x, "/", x, ".vcf.gz")))
+    })
   message("script finished without errors")
 }
 
@@ -299,11 +349,13 @@ get_data_from_mrbase <- function(id, out_wd = "/home/couchr02/Mendel_Commun/Vcff
 #' @param vcffile_out the path to the outcome
 #' @param chrompos the genetic region ex : "22:25115489-26127836"
 #' @param ldref the ld reference panel
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return
 #' @export
 
-get_coloc <- function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs") {
+get_coloc <- function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+                      parameters = default_param()) {
   message("initializing coloc")
   vout <- GagnonMR::gwasvcf_to_coloc_eloi(vcffile_exp, vcffile_out, chrompos)
   if(is.null(vout)) {return( data.frame(exposure= gwasvcf::query_gwas(vcffile_exp, chrompos = "1:40000-80000")@metadata$header@samples,
@@ -311,12 +363,15 @@ get_coloc <- function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couchr0
   vout[[1]]$MAF <- vout[[1]]$MAF %>% ifelse(. == 0, 0.001, .) %>% ifelse(. == 1, 0.999, .)
   vout[[2]]$MAF <- vout[[2]]$MAF %>% ifelse(. == 0, 0.001, .) %>% ifelse(. == 1, 0.999, .)
   vres <- coloc::coloc.abf(vout[[1]], vout[[2]])
+  pp <- as.data.table(as.list(vres$summary[2:6]))
+  colnames(pp)<-paste0("posprob_coloc_PPH",0:4)
   vresres <- vres$results %>% as.data.table(.)
-  df_res <- data.frame(exposure = vout$dataset1$id[1], outcome = vout$dataset2$id[1], posprob_coloc.mr = vres$summary[6],
-                       posprob_coloc.SNP = vresres[which.max(SNP.PP.H4), snp] ,posprob_coloc.SNPexplained_var = vresres[which.max(SNP.PP.H4), SNP.PP.H4] )
-
-  return(df_res)
+  df_res1 <- data.frame(exposure = vout$dataset1$id[1], outcome = vout$dataset2$id[1])
+  df_res2 <- data.frame(posprob_colocH4.SNP = vresres[which.max(SNP.PP.H4), snp] ,posprob_colocH4.SNPexplained_var = vresres[which.max(SNP.PP.H4), SNP.PP.H4] )
+  dt_res <- do.call(cbind,list(df_res1, pp, df_res2)) %>% data.table::as.data.table(.)
+  return(dt_res)
 }
+
 
 #' Perform lead variant cis analysis
 #'
@@ -324,11 +379,13 @@ get_coloc <- function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couchr0
 #' @param vcffile_out the path to the outcome .vcf.gz file
 #' @param chrompos the gene region e.g. 1:30000-40000
 #' @param ldref the path to the ldreference panel
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return a data.table of results
 #' @export
 
-get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs") {
+get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+                         parameters = default_param()) {
   message("initializing uni-cis MR")
   dat_vcf <- gwasvcf::query_gwas(vcffile_exp, chrompos = chrompos)
   dat_tsmr <- gwasglue::gwasvcf_to_TwoSampleMR(dat_vcf)
@@ -342,7 +399,7 @@ get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couc
 
   harm <- TwoSampleMR::harmonise_data(dat_tsmr, out_tsmr, action = 1)
   harm <- TwoSampleMR::add_rsq(harm)
-  harm$fstat.exposure <- fstat_fromdat(harm)
+  harm$fstat.exposure <- fstat_fromdat(list(harm))
   harm <- TwoSampleMR::steiger_filtering( harm )
   res_all <- TwoSampleMR::mr(harm, method_list = "mr_wald_ratio") %>% data.table::as.data.table(.)
   if(dim(res_all)[1]==0) {return(data.frame(exposure= dat_tsmr$exposure[1], outcome = out_tsmr$outcome[1], b.wald=NA,se.wald=NA,pval.wald=NA))}
@@ -364,11 +421,13 @@ get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couc
 #' @param vcffile_out the path to the outcome vcf.gz file
 #' @param ldref the path to the ldreference panel
 #' @param chrompos the genetic region (only a dummy variable to make consitent form with get_uni_cis)
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return a data.table of pan anaysis
 #' @export
 
-get_pan <- function(vcffile_exp, vcffile_out, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs", chrompos = NA) {
+get_pan <- function(vcffile_exp, vcffile_out, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs", chrompos = NA,
+                    parameters = default_param()) {
   message("initializing pan mr")
   chrompos<-NA
   df_null <- data.frame(exposure= gwasvcf::query_gwas(vcffile_exp, chrompos = "1:40000-80000")@metadata$header@samples,
@@ -413,14 +472,15 @@ get_pan <- function(vcffile_exp, vcffile_out, ldref = "/home/couchr02/Mendel_Com
 #' @param vcffile_exp the path to the exposure vcf.gz file
 #' @param vcffile_out the path to the outcome vcf.gz file
 #' @param chrompos the gene region (dummy variable) only there for consistency with get_uni_cis
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return a data.table of results
 #' @export
 
-get_reverseMR <- function(vcffile_exp, vcffile_out, chrompos = NA) {
+get_reverseMR <- function(vcffile_exp, vcffile_out, chrompos = NA, parameters = default_param()) {
   message("initializin reverseMR")
   res <- GagnonMR::get_pan(vcffile_exp = vcffile_out, vcffile_out = vcffile_exp)
-  data.table::setnames(res, c("outcome", "exposure","b.ivw", "se.ivw", "pval.ivw"), c("exposure", "outcome", "b.reverseMR", "se.reverseMR", "pval.reverseMR"))
+  data.table::setnames(res, c("outcome", "exposure","b.ivw", "se.ivw", "pval.ivw", nsnp.ivw), c("exposure", "outcome", "b.reverseMR", "se.reverseMR", "pval.reverseMR", "nsnp.reverseMR"))
   return(res)
 }
 
@@ -431,20 +491,21 @@ get_reverseMR <- function(vcffile_exp, vcffile_out, chrompos = NA) {
 #' @param vcffile_exp the path to the exposure vcf.gz file
 #' @param vcffile_out the path to the outcome vcf.gz file
 #' @param chrompos the gene region e.g. 1:30000-40000
-#' @param clumping_treshold the clumping threshold to do the analysis
 #' @param ldref the path to the ldreferene panel
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return a data.table of the results
 #' @export
 
-get_multicis <- function(vcffile_exp, vcffile_out,  chrompos, clumping_treshold = 0.6, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs") {
+get_multicis <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+                         parameters = default_param()) {
   message("initializing multicis mr")
   dat_tsmr <- gwasvcf::query_gwas(vcffile_exp, chrompos = chrompos) %>% gwasglue::gwasvcf_to_TwoSampleMR(.) %>% data.table::as.data.table(.)
-  df_null <- data.frame(exposure= dat_tsmr$exposure[1], outcome = gwasvcf::query_gwas(vcffile_out, chrompos = "1:40000-80000")@metadata$header@samples, b.multi_cis=NA,se.multi_cis=NA,pval.multi_cis=NA, nsnip.multi_cis = 0)
+  df_null <- data.frame(exposure= dat_tsmr$exposure[1], outcome = gwasvcf::query_gwas(vcffile_out, chrompos = "1:40000-80000")@metadata$header@samples, beta.multi_cis=NA,se.multi_cis=NA,pval.multi_cis=NA, nsnip.multi_cis = 0)
   if(dat_tsmr[pval.exposure < 5e-8,.N] == 0) {return(df_null)}
 
   retain_snp  <- dat_tsmr[pval.exposure < 5e-8,] %>% dplyr::select(rsid=SNP, pval=pval.exposure, id = id.exposure) %>%
-    ieugwasr::ld_clump(., clump_r2 = 0.6, clump_p = 5e-8, plink_bin=genetics.binaRies::get_plink_binary(), bfile=ldref) %>%
+    ieugwasr::ld_clump(., clump_r2 = parameters$clumping_treshold, clump_p = 5e-8, plink_bin=genetics.binaRies::get_plink_binary(), bfile=ldref) %>%
     {.$rsid}
 
   out_vcf <- tryCatch(
@@ -454,29 +515,32 @@ get_multicis <- function(vcffile_exp, vcffile_out,  chrompos, clumping_treshold 
   if(dim(out_vcf)[1]<2) {return(df_null)}
   out_tsmr <- out_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(., "outcome") %>% as.data.table(.)
   harm <- TwoSampleMR::harmonise_data(dat_tsmr, out_tsmr, 1)
+  harm <- TwoSampleMR::steiger_filtering(harm) %>% as.data.table()
+  ndirectionalyinconsistent <- harm[, sum(steiger_dir == FALSE & steiger_pval < 0.05)]
+  harm <- harm[!(steiger_dir == FALSE & steiger_pval < 0.05),]
   ldmat <- ieugwasr::ld_matrix_local(harm$SNP, plink_bin = genetics.binaRies::get_plink_binary(), bfile = ldref)
 
   if (nrow(harm) < 2) {
     return(df_null)
   }
-  else {
-    x <- harm
-    mriobj <- MendelianRandomization::mr_input(bx = x$beta.exposure,
-                                               bxse = x$se.exposure, by = x$beta.outcome, byse = x$se.outcome,
-                                               exposure = x$exposure[1], outcome = x$outcome[1],
-                                               snps = x$SNP, effect_allele = x$effect_allele.exposure,
-                                               other_allele = x$other_allele.exposure, eaf = x$eaf.exposure)
-    mriobj@correlation<-ldmat
 
-    IVWobject <- MendelianRandomization::mr_ivw(mriobj, model = "default",
-                                                correl = TRUE, distribution = "normal", alpha = 0.05)
+  x <- harm
+  mriobj <- MendelianRandomization::mr_input(bx = x$beta.exposure,
+                                             bxse = x$se.exposure, by = x$beta.outcome, byse = x$se.outcome,
+                                             exposure = x$exposure[1], outcome = x$outcome[1],
+                                             snps = x$SNP, effect_allele = x$effect_allele.exposure,
+                                             other_allele = x$other_allele.exposure, eaf = x$eaf.exposure)
+  mriobj@correlation<-ldmat
 
-    res_multicis <- data.frame(exposure = dat_tsmr[1, ]$exposure, outcome = out_tsmr$outcome[1], beta.multi_cis = IVWobject@Estimate,
-                               se.multi_cis = IVWobject@StdError, pval.multi_cis = IVWobject@Pvalue,
-                               cochranQ.multi_cis = IVWobject@Heter.Stat[1], cochranQpval.multi_cis = IVWobject@Heter.Stat[2],
-                               nsnp.multi_cis = nrow(harm))
-    return(res_multicis)
-  }
+  IVWobject <- MendelianRandomization::mr_ivw(mriobj, model = "default",
+                                              correl = TRUE, distribution = "normal", alpha = 0.05)
+
+  res_multicis <- data.frame(exposure = dat_tsmr[1, ]$exposure, outcome = out_tsmr$outcome[1], beta.multi_cis = IVWobject@Estimate,
+                             se.multi_cis = IVWobject@StdError, pval.multi_cis = IVWobject@Pvalue,
+                             cochranQ.multi_cis = IVWobject@Heter.Stat[1], cochranQpval.multi_cis = IVWobject@Heter.Stat[2],
+                             nsnp.multi_cis = nrow(harm), nsteigerfalse.multi_cis = ndirectionalyinconsistent)
+  return(res_multicis)
+
 }
 
 #' Run all pqtl analyses with control on which analysis specifically to run
@@ -485,15 +549,17 @@ get_multicis <- function(vcffile_exp, vcffile_out,  chrompos, clumping_treshold 
 #' @param vcffile_out the path to the outcome vcf.gz file
 #' @param chrompos the gene region e.g. 1:30000-40000
 #' @param method_list the list of method to include "get_pan", "get_reverseMR", "get_uni_cis", "get_coloc", "get_multicis", "get_susie_coloc", "get_multicis_susie"
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return a data.table with all results
 #' @export
 
 run_all_pqtl_analyses <- function(vcffile_exp, vcffile_out,  chrompos,
-                                  method_list = list("get_pan", "get_reverseMR", "get_uni_cis", "get_coloc", "get_multicis")) {
+                                  method_list = list("get_pan", "get_reverseMR", "get_uni_cis", "get_coloc", "get_multicis"),
+                                  parameters = default_param()) {
   message(paste0("***********initilalizing all qtl analysis for ", vcffile_exp, " and ", vcffile_out, "************"))
-  gwasvcf::set_bcftools()
-  gwasvcf::set_plink()
+  if(!gwasvcf::check_bcftools()) {gwasvcf::set_bcftools()}
+  if(!gwasvcf::check_plink()) {gwasvcf::set_plink()}
   if(is.na(chrompos)) {
     method_list <- method_list[sapply(method_list, function(x) (x %in% c("get_pan", "get_reverseMR")))]
   }
@@ -506,7 +572,7 @@ run_all_pqtl_analyses <- function(vcffile_exp, vcffile_out,  chrompos,
   }
 
   res <- lapply(method_list, function(meth) {
-    get(meth)(vcffile_exp = vcffile_exp, vcffile_out = vcffile_out, chrompos = chrompos) })
+    get(meth)(vcffile_exp = vcffile_exp, vcffile_out = vcffile_out, chrompos = chrompos, parameters = parameters) })
 
   res_all <- res %>% purrr::reduce(merge, by = c("exposure", "outcome"))
   return(res_all)
@@ -539,17 +605,18 @@ clump_data_local <- function(dat, ldref ="/home/couchr02/Mendel_Commun/Christian
 #' @param vcffile a vcf-file path
 #' @param chrompos chrompos
 #' @param ldref th ld reference panel
-#' @param L the maximum number of causal variants
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return an object of class susie
 #' @export
 get_susie <- function(vcffile, chrompos,
-                      ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs", L = 10) {
+                      ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+                      parameters = default_param()) {
   dat <- GagnonMR::gwasvcf_to_finemapr_gagnon(region = chrompos, vcf = vcffile, bfile = ldref)
+  L<- parameters$L
 
-
-  fitted_rss <- vector(mode = "list", length = L)
-  for(i in 1:L) {
+  fitted_rss <- vector(mode = "list", length = length(L))
+  for(i in L) {
     tryCatch(expr = {
       fitted_rss[[i]] <- susieR::susie_rss(
         z = dat[[1]]$z$zscore,
@@ -573,17 +640,19 @@ get_susie <- function(vcffile, chrompos,
 #' @param vcffile_out dah
 #' @param chrompos dah
 #' @param ldref dah
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return
 #' @export
 
-get_susie_coloc <-function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs") {
+get_susie_coloc <-function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+                           parameters=default_param()) {
   message("initializing susie coloc")
-
+  sus1 <- GagnonMR::get_susie(vcffile = vcffile_exp, chrompos = chrompos, parameters = parameters)
+  sus2 <- GagnonMR::get_susie(vcffile = vcffile_out, chrompos = chrompos, parameters = parameters)
   df_null <- data.table(  exposure = gwasvcf::query_gwas(vcffile_exp,  chrompos = "1:40000-80000")@metadata$header@samples,
-               outcome = gwasvcf::query_gwas(vcffile_out,  chrompos = "1:40000-80000")@metadata$header@samples)
-  sus1 <- GagnonMR::get_susie(vcffile = vcffile_exp, chrompos = chrompos)
-  sus2 <- GagnonMR::get_susie(vcffile = vcffile_out, chrompos = chrompos)
+                          outcome = gwasvcf::query_gwas(vcffile_out,  chrompos = "1:40000-80000")@metadata$header@samples,
+                          susiecoloc.n.credibleset.exposure = length(sus1$sets$cs), susiecoloc.n.credibleset.outcome = length(sus2$sets$cs))
   if(is.null(sus1)|is.null(sus2)){return(df_null)}
   susie.res <- coloc::coloc.susie(sus1,sus2)
 
@@ -600,11 +669,11 @@ get_susie_coloc <-function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/c
   susie_res_summary[,ID := NULL]
   susie_res_summary$exposure <- gwasvcf::query_gwas(vcffile_exp,  chrompos = "1:40000-80000")@metadata$header@samples
   susie_res_summary$outcome <- gwasvcf::query_gwas(vcffile_out,  chrompos = "1:40000-80000")@metadata$header@samples
-
+  susie_res_summary$susiecoloc.n.credibleset.exposure <- length(sus1$sets$cs)
+  susie_res_summary$susiecoloc.n.credibleset.outcome <- length(sus2$sets$cs)
   return(susie_res_summary)
 
 }
-
 
 #' Same as get_multicis, but instead of selecting instruments based on LD clumping select with finemapping using SuSiE.
 #'
@@ -612,14 +681,16 @@ get_susie_coloc <-function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/c
 #' @param vcffile_out dah
 #' @param chrompos dah
 #' @param ldref dah
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return select as instrument the SNP with the highest PIP in each credible set. If no SNP has a p-value under 5e-8 or number of credible sets < 2 return empty data.frame.
 #' @export
 
-get_multicis_susie <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs") {
+get_multicis_susie <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+                               parameters = default_param()) {
   message("initializing multicis mr with susie finemapping")
   df_null <- data.frame(exposure= gwasvcf::query_gwas(vcffile_exp, chrompos = "1:40000-80000")@metadata$header@samples, outcome = gwasvcf::query_gwas(vcffile_out, chrompos = "1:40000-80000")@metadata$header@samples, nsnp.multi_cis_susie = 0)
-  fitted_rss <- GagnonMR::get_susie(vcffile = vcffile_exp, chrompos = chrompos)
+  fitted_rss <- GagnonMR::get_susie(vcffile = vcffile_exp, chrompos = chrompos, parameters = parameters)
   if(is.null(fitted_rss)) {return(df_null)}
   dt_sus <- summary(fitted_rss)$vars %>% data.table::as.data.table(.)
   dt_sus <- dt_sus[cs != -1, ]
@@ -637,8 +708,8 @@ get_multicis_susie <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/ho
   out_tsmr <- out_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(., "outcome") %>% as.data.table(.)
   harm <- TwoSampleMR::harmonise_data(dat_tsmr, out_tsmr, 1)
   harm <- TwoSampleMR::steiger_filtering(harm) %>% as.data.table()
-ndirectionalyinconsistent <- harm[, sum(steiger_dir == FALSE)]
-harm <- harm[steiger_dir == TRUE,]
+ndirectionalyinconsistent <- harm[, sum(steiger_dir == FALSE & steiger_pval < 0.05)]
+harm <- harm[!(steiger_dir == FALSE & steiger_pval < 0.05),]
 
   ldmat <- ieugwasr::ld_matrix_local(harm$SNP, plink_bin = genetics.binaRies::get_plink_binary(), bfile = ldref)
   ldmat_test<-ldmat ; diag(ldmat_test) <- 0
@@ -668,26 +739,93 @@ harm <- harm[steiger_dir == TRUE,]
 }
 
 
+#' The default param for pQTL analyses
+#'
+#' @return the list of default param
+#' @export
+default_param <- function() {
+  return(list(clumping_treshold = 0.6,
+              L = 1:10) )
+}
 
 
-#' Get instrument ld clump = .001 and pvalue < 5e-8
+#' Get instrument
 #'
 #' @param vcffile the path to the vcffile
-#' @param should_write if FALSE, simply return the value if TRUE write in the directory
+#' @param pval the minimum pvalue of the instruments
+#' @param clump should clump TRUE or FALSE
+#' @param r2 the maximum ld r2
+#' @param kb the clumping kilobases
+#' @param should_write should write (TRUE or FALSE) the instrument in the vcf directory.
 #'
 #' @return
 #' @export
 
 get_inst <- function(vcffile, pval = 5e-08, clump = TRUE, r2 = 0.001,
                      kb = 10000, should_write = FALSE) {
-  dat_vcf <- gwasvcf::query_gwas(vcffile, pval = pval)
-  dat_sign <- dat_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(., "exposure") %>% data.table::as.data.table(.)
-
-  if(clump==TRUE) {
-    dat_sign <- GagnonMR::clump_data_local(dat_sign, clump_kb = kb, clump_r2 = r2,)
+  stopifnot(gwasvcf::check_plink()&gwasvcf::check_bcftools())
+  instfile <- gsub(".vcf.gz", paste0("_inst_rsquare", r2, "_kb", kb,".txt"), vcffile)
+  if(file.exists(instfile)&clump == TRUE){
+    dat_sign <- read.table(instfile, sep = "\t")
+    data.table::setDT(dat_sign)
+  } else {
+    dat_vcf <- gwasvcf::query_gwas(vcf = vcffile, pval = pval)
+    dat_sign <- dat_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(., "exposure") %>% data.table::as.data.table(.)
+    if(clump==TRUE) {
+      dat_sign <- GagnonMR::clump_data_local(dat_sign, clump_kb = kb, clump_r2 = r2)
+    }
   }
-  if(should_write == FALSE)  {
-    fwrite(dat_sign, gsub(".vcf.gz", "_inst.txt", vcffile))
+  if(should_write == TRUE)  {
+    write.table(dat_sign, file = instfile, sep = "\t")
   }
   return(dat_sign)
+}
+
+
+#' extract outcome
+#'
+#' @param snps a vector of SNPs to extract
+#' @param outcomes the path to the vcf file
+#' @param proxies passed to the function gwasvcf::query_gwas
+#' @param rsq passed to the function gwasvcf::query_gwas
+#' @param ldref path to plink bed/bim/fam ld reference panel
+#'
+#' @return
+#' @export
+
+extract_outcome_variant <-function( snps,
+                                    outcomes,
+                                    proxies = "yes",
+                                    rsq = 0.8,
+                                    ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs") {
+  gwasvcf::set_bcftools()
+  gwasvcf::set_plink()
+  res <- gwasvcf::query_gwas(vcf = outcomes, rsid = snps, proxies = proxies, bfile = ldref,
+                             tag_r2 = rsq) %>%
+    gwasglue::gwasvcf_to_TwoSampleMR(., "outcome") %>%
+    data.table::as.data.table(.)
+  return(res)
+
+}
+
+
+#' Function that exits if you code takes 95 of total memory
+#'
+#' @return
+#' @export
+#'
+#' @examples protect_memory()
+protect_memory <- function() {
+  test <- as.data.frame(system2("free", " --mega", stdout = TRUE))
+  mem.col <- strsplit(test[1,], " +")[[1]]
+  mem.total <- as.numeric(strsplit(test[2,], " +")[[1]][which(mem.col=='total')])
+  mem.curr <- as.numeric(strsplit(test[2,], " +")[[1]][which(mem.col=='used')])
+  mem.used <- as.numeric(sapply(strsplit(as.character(pryr::mem_used()), ' '), `[[`, 1))/1e06
+  if(((mem.curr / mem.total) >= 0.9)){
+    message(paste0("Warning : memory usage above ", 0.9*100 ," % . This script represents ", (mem.used/mem.curr)*100, "% of current memory usage."))
+    if(((mem.curr / mem.total) >= 0.95) | ((mem.used/mem.curr) > opt$check_memory_lim)){
+      stop("Memory usage too high. Stopping analysis.")
+      quit(save = "no", status=1)
+    }
+  }
 }

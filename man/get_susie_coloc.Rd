@@ -8,7 +8,8 @@ get_susie_coloc(
   vcffile_exp,
   vcffile_out,
   chrompos,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs"
+  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+  parameters = default_param()
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ get_susie_coloc(
 \item{chrompos}{dah}
 
 \item{ldref}{dah}
+
+\item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }
 \value{
 
