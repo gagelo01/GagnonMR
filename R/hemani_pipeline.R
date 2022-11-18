@@ -415,6 +415,73 @@ get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couc
   return(res_wald)
 }
 
+
+#' Perform uni-cis pwmr method with exposures from various datasets
+#'
+#' Description
+#' 1- Select SNPs that were associated with any exposure (using a P-value threshold ≤ 5 x 10-8) in at least one of the XXX studies, in the gene region.
+#' 2- For each protein select the lead variant among the SNPs that were selected at step 1. Alternatively, by setting default_param$minpval1 to FALSE
+#' the function will conduct linkage disequilibrium (LD) clumping for the instruments with the TwoSampleMR R package to identify independent pQTLs for each protein. The funcyion uses r2< 0.001 as the threshold to exclude dependent pQTLs in the gene region.
+#'
+#' @param vec_vcffile_exp A vector with the path to the exposure .vcf.gz file
+#' @param vcffile_out the path to the outcome .vcf.gz file
+#' @param chrompos the gene region e.g. 1:30000-40000
+#' @param ldref The path to the ldreference panel
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
+#'
+#' @return
+#' @export
+
+get_uni_cis_vecexp <- function(vec_vcffile_exp,
+                               vcffile_out,
+                               chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+                               parameters = GagnonMR::default_param())  {
+
+  stopifnot(gwasvcf::check_bcftools()&gwasvcf::check_plink())
+  dat_tsmr <- map(as.list(vec_vcffile_exp), function(x) {
+    dat_vcf <- gwasvcf::query_gwas(vcf = x, chrompos = chrompos)
+    dat_tsmr <- gwasglue::gwasvcf_to_TwoSampleMR(dat_vcf)
+    data.table::setDT(dat_tsmr)
+    dat_tsmr[,id.exposure := gsub(paste(parameters$path, collapse = "|"), "", x) %>% gsub("/.*$", "", .)]
+    return(dat_tsmr)
+  }) %>% rbindlist(., fill = TRUE)
+
+  dtnull<-  data.frame(id.exposure = gsub(paste(parameters$path, collapse = "|"), "", vec_vcffile_exp) %>% gsub("/.*$", "", .),
+                       id.outcome = gsub(paste(parameters$path, collapse = "|"), "", vcffile_out) %>% gsub("/.*$", "", .),
+                       exposure = sapply(as.list(vec_vcffile_exp), function(x) gwasvcf::query_gwas(x, chrompos = "1:40000-40000")@metadata$header@samples),
+                       outcome = gwasvcf::query_gwas(vcffile_out, chrompos = "1:40000-40000")@metadata$header@samples,
+                       b = NA, se = NA, pval = NA)
+
+  rsid <- dat_tsmr[dat_tsmr$pval.exposure<5e-8, ]$SNP
+
+  dat_ld<-dat_tsmr[dat_tsmr$SNP%in%rsid,]
+  if (dim(dat_ld)[1] == 0) {return(dtnull)}
+
+  if(parameters$minpval1 == FALSE) {
+    dat_ld <- GagnonMR::clump_data_local(dat_ld)
+  } else {
+    dat_ld <- dat_ld[,.SD[which.min(pval.exposure)],by = "id.exposure"]
+  }
+  out_vcf <- gwasvcf::query_gwas(vcf = vcffile_out, rsid = dat_ld$SNP, proxies = "yes", bfile = ldref)
+
+  if (dim(out_vcf)[1] == 0) {return(dtnull)}
+  out_tsmr <- out_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(.,
+                                                           "outcome") %>% data.table::as.data.table(.)
+  out_tsmr$id.outcome <-  gsub(paste(parameters$path, collapse = "|"), "", vcffile_out) %>% gsub("/.*$", "", .)
+
+  harm <- TwoSampleMR::harmonise_data(dat_ld, out_tsmr, action = 1)
+  harm <- TwoSampleMR::add_rsq(harm)
+  harm$fstat.exposure <- fstat_fromdat(list(harm))
+  harm <- TwoSampleMR::steiger_filtering(harm)
+  res_all <- map(split(harm, f = harm$id.exposure), function(x) {
+    GagnonMR::all_mr_methods(x) %>%
+      data.table::as.data.table(.)}) %>% rbindlist(., fill = TRUE)
+  if (dim(res_all)[1] == 0) {return(dtnull)}
+
+  if(all(res_all$method == "Wald ratio")){res_all <- merge(res_all, dat_ld[,.(id.exposure, pval.exposure)], by = "id.exposure")}
+  return(res_all)
+}
+
 #' Perform pan (cis + trans) analysis
 #'
 #' @param vcffile_exp the path to the exposure vcf.gz file
@@ -558,8 +625,7 @@ run_all_pqtl_analyses <- function(vcffile_exp, vcffile_out,  chrompos,
                                   method_list = list("get_pan", "get_reverseMR", "get_uni_cis", "get_coloc", "get_multicis"),
                                   parameters = default_param()) {
   message(paste0("***********initilalizing all qtl analysis for ", vcffile_exp, " and ", vcffile_out, "************"))
-  if(!gwasvcf::check_bcftools()) {gwasvcf::set_bcftools()}
-  if(!gwasvcf::check_plink()) {gwasvcf::set_plink()}
+  stopifnot(gwasvcf::check_bcftools()&gwasvcf::check_plink())
   if(is.na(chrompos)) {
     method_list <- method_list[sapply(method_list, function(x) (x %in% c("get_pan", "get_reverseMR")))]
   }
@@ -745,7 +811,8 @@ harm <- harm[!(steiger_dir == FALSE & steiger_pval < 0.05),]
 #' @export
 default_param <- function() {
   return(list(clumping_treshold = 0.6,
-              L = 1:10) )
+              L = 1:10, minpval1 = TRUE,
+              path = paste0("/mnt/sda/gagelo01/Vcffile/", c("MRBase", "Server"), "_vcf/")))
 }
 
 
