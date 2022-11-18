@@ -42,4 +42,12 @@ Imports:
     hyprcoloc,
     purrr,
     stringr,
-    MVMR
+    MVMR,
+    readxl,
+    parallel,
+    foreach,
+    doParallel,
+    LDlinkR,
+    furrr
+Depends: 
+    tidyverse
