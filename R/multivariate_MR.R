@@ -168,7 +168,7 @@ mv_multiple_MendelianRandomization <- function(exposure_outcome_harmonized, phen
   x <- exposure_outcome_harmonized
   mriobj <- MendelianRandomization::mr_mvinput(bx = x$exposure_beta,
                                                bxse = x$exposure_se, by = x$outcome_beta, byse = x$outcome_se,
-                                               exposure = colnames(x$exposure_se), outcome = x$outname$outcome)
+                                               exposure = x$expname$exposure, outcome = x$outname$outcome)
   mvmr_res <- vector(mode = "list", length = 2)
   x <- MendelianRandomization::mr_mvivw(object = mriobj, model = "default", robust = FALSE)
   ivwestimate <- data.frame(exposure = x@Exposure,
@@ -235,7 +235,7 @@ obtain_conditionalFstatistics <- function(exposure_outcome_harmonized, pheno_cov
   diag(mvmrcovmatrix) <-  1
   Xcovmat<- MVMR::phenocov_mvmr(mvmrcovmatrix,F.data[, .SD,.SDcols = which(grepl("sebetaX", colnames(F.data)))])
   sres2 <- MVMR::strength_mvmr(r_input = F.data, gencov = Xcovmat)
-  colnames(sres2) <- colnames(mv_harm$exposure_beta)
+  colnames(sres2) <- mv_harm$expname$exposure
   rownames(sres2) <- NULL
   sres2 <- data.frame(exposure = colnames(sres2), F_stastistics = as.numeric(sres2[1,]))
   return(sres2)
