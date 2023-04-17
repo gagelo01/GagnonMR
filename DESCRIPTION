@@ -18,7 +18,6 @@ RoxygenNote: 7.1.2
 Imports: 
     TwoSampleMR,
     data.table,
-    MRInstruments,
     varhandle,
     MendelianRandomization,
     ieugwasr,
@@ -26,7 +25,6 @@ Imports:
     dplyr,
     grid,
     biomaRt,
-    qvalue,
     coloc,
     gwasglue,
     gwasvcf,
@@ -37,17 +35,14 @@ Imports:
     plyr,
     scales,
     tidyr,
-    S4Vectors,
     susieR,
     hyprcoloc,
     purrr,
     stringr,
     MVMR,
-    readxl,
-    parallel,
-    foreach,
-    doParallel,
-    LDlinkR,
-    furrr
+    gassocplot
 Depends: 
     tidyverse
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
