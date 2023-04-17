@@ -216,23 +216,31 @@ get_eQTL<- function(tissue,
 #' to run after extracting data from gtex
 #'
 #' @param exposures the GTEx data.frame
-#' @param translation the translation data.frame to get rsids.
+#' @param translation the translation data.frame b.38 to get rsids.
+#' @param traduction the traduction data.frame b37 to get chrom pos and eaf
 #' @param gencode a data.frame to transform Ensemble into genecard name
 #'
 #' @return
 #' @export
 format_gtex_data <- function(exposures,
-                             translation = fread("/mnt/sda/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"),
+                             translation = fread("/mnt/sda/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"), #b38
+                             traduction, #b37
                              gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt")) {
   setnames(gencode, "gene_id", "ensembl_gene_id", skip_absent = TRUE)
-  data_eQTL <- separate(exposures, col = "variant", into = c("chr_todump", "pos_todump", "Allele1", "Allele2", "buildtodump"))
-  data_eQTL <- merge(data_eQTL, translation, by.x = c("chr_top_variant", "start_top_variant"),
+  data_eQTL <- separate(exposures, col = "variant", into = c("chr_todump", "pos_todump", "other_allele", "effect_allele", "buildtodump")) #https://gtexportal.org/home/eqtlDashboardPage
+  data_eQTL <- merge(data_eQTL, translation[,.(rsid, chr, pos_b38)], by.x = c("chr_top_variant", "start_top_variant"),
                      by.y = c("chr", "pos_b38"))
+  data_eQTL[,chr:=NULL]
+  data_eQTL<-merge(data_eQTL, traduction, by ="rsid")
 
   #eaf
-  data_eQTL <- data_eQTL[(Allele1 == a0 | Allele1 == a1) & (Allele2 == a0 | Allele2 == a1) & a0 != a1 & Allele1 != Allele2, ] #because low number removed, coded on the forward strand
+  data_eQTL <- data_eQTL[(effect_allele == a0 | effect_allele == a1) & (other_allele == a0 | other_allele == a1) & a0 != a1 & effect_allele != other_allele, ]
   data_eQTL <- data_eQTL[chr_top_variant %in% 1:22, ]
-  data_eQTL[, eaf := ifelse(Allele1 == a0, EUR, 1-EUR)]
+
+  data_eQTL[effect_allele == a0, beta := beta*-1]
+  data_eQTL[effect_allele == a0, effect_allele := a1]
+  data_eQTL[other_allele == a1, other_allele := a0] #less than mrbase, possibly because I do not use the same traduction file
+  data_eQTL[, eaf := EUR]
 
   data_eQTL[, `:=`(probe, gsub(".", "_", probe, fixed = TRUE))]
   data_eQTL <- separate(data_eQTL, col = "probe", into = c("ensembl_gene_id", "to_dump"))
@@ -249,10 +257,10 @@ format_gtex_data <- function(exposures,
   data_eQTL <- distinct(data_eQTL)
   data_eqtl <- TwoSampleMR::format_data(data_eQTL, type = "exposure",
                                         phenotype_col = "Phenotype", snp_col = "rsid", beta_col = "beta",
-                                        se_col = "se", effect_allele_col = "Allele1", id_col = "id",
-                                        other_allele_col = "Allele2", samplesize_col = "sample_size",
+                                        se_col = "se", eaf_col = "eaf", effect_allele_col = "effect_allele", id_col = "id",
+                                        other_allele_col = "other_allele", samplesize_col = "sample_size",
                                         pval_col = "p_val", gene_col = "ensembl_gene_id", chr_col = "chr",
-                                        pos_col = "start_top_variant")
+                                        pos_col = "position")
   setDT(data_eqtl)
 
   #return
