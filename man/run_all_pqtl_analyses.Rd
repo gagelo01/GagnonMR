@@ -8,8 +8,7 @@ run_all_pqtl_analyses(
   vcffile_exp,
   vcffile_out,
   chrompos,
-  method_list = list("get_pan", "get_reverseMR", "get_uni_cis", "get_coloc",
-    "get_multicis"),
+  method_list = c("get_coloc", "get_uni_cis"),
   parameters = default_param()
 )
 }

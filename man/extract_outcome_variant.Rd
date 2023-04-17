@@ -9,7 +9,8 @@ extract_outcome_variant(
   outcomes,
   proxies = "yes",
   rsq = 0.8,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs"
+  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+  parameters = default_param()
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ extract_outcome_variant(
 \item{rsq}{passed to the function gwasvcf::query_gwas}
 
 \item{ldref}{path to plink bed/bim/fam ld reference panel}
+
+\item{parameters}{default_param()}
 }
 \value{
 

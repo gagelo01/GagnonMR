@@ -8,7 +8,7 @@ from_uniprot_to_hgnc(
   uniprot_vec,
   ensembl = biomaRt::useMart("ensembl", dataset = "hsapiens_gene_ensembl"),
  
-    uniprot_dictionnary = fread("/mnt/sda/boujer01/Drug_Targets/Uniprot_ID/uniprot_final.txt")
+    uniprot_dictionnary = fread("/mnt/sda/boujer01/DATA/Drug_Targets/Uniprot_ID/uniprot_final.txt")
 )
 }
 \arguments{

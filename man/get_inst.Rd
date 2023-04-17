@@ -10,7 +10,8 @@ get_inst(
   clump = TRUE,
   r2 = 0.001,
   kb = 10000,
-  should_write = FALSE
+  should_write = FALSE,
+  parameters = default_param()
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ get_inst(
 \item{kb}{the clumping kilobases}
 
 \item{should_write}{should write (TRUE or FALSE) the instrument in the vcf directory.}
+
+\item{parameters}{default_param(), that it is possible to change.}
 }
 \value{
 

@@ -8,6 +8,7 @@ format_gtex_data(
   exposures,
  
     translation = fread("/mnt/sda/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"),
+  traduction,
  
     gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt")
 )
@@ -15,7 +16,9 @@ format_gtex_data(
 \arguments{
 \item{exposures}{the GTEx data.frame}
 
-\item{translation}{the translation data.frame to get rsids.}
+\item{translation}{the translation data.frame b.38 to get rsids.}
+
+\item{traduction}{the traduction data.frame b37 to get chrom pos and eaf}
 
 \item{gencode}{a data.frame to transform Ensemble into genecard name}
 }
