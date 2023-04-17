@@ -8,26 +8,22 @@ Authors@R:
            email = "eloi.gagnon@ulaval.ca",
            comment = c(ORCID = "YOUR-ORCID-ID"))
 Description: Here is a repository for all functions developped by Éloi for performing Mendelian Randomization articles. 
-  The package builds greatly on TwoSampleMr package. All function are thought to be used in a pipeline manner. 
-  From cleaning raw summary statistics to plotting results.
+  The package builds greatly on TwoSampleMr package. All functions work in a pipeline manner, from cleaning raw summary statistics to plotting results.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.2
 Imports: 
-    TwoSampleMR,
     data.table,
     varhandle,
     MendelianRandomization,
-    ieugwasr,
     magrittr,
     dplyr,
     grid,
+    BiocManager,
     biomaRt,
     coloc,
-    gwasglue,
-    gwasvcf,
     VariantAnnotation,
     genetics.binaRies,
     ggplot2,
@@ -36,13 +32,16 @@ Imports:
     scales,
     tidyr,
     susieR,
-    hyprcoloc,
     purrr,
-    stringr,
-    MVMR,
-    gassocplot
-Depends: 
-    tidyverse
+    stringr
 Suggests: 
     testthat (>= 3.0.0)
+Remotes:
+    MRCIEU/TwoSampleMR,
+    MRCIEU/ieugwasr,
+    MRCIEU/gwasglue,
+    MRCIEU/gwasvcf,
+    jrs95/hyprcoloc,
+    WSpiller/MVMR,
+    jrs95/gassocplot
 Config/testthat/edition: 3
