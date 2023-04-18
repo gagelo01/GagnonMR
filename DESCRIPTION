@@ -24,7 +24,6 @@ Imports:
     BiocManager,
     biomaRt,
     coloc,
-    VariantAnnotation,
     genetics.binaRies,
     ggplot2,
     mr.raps,
@@ -33,7 +32,8 @@ Imports:
     tidyr,
     susieR,
     purrr,
-    stringr
+    stringr,
+    VariantAnnotation
 Suggests: 
     testthat (>= 3.0.0)
 Remotes:
