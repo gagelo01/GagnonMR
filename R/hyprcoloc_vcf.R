@@ -113,7 +113,7 @@ sensitivity.plot_wrapper <- function(df_aligned, traits_inorder =  levels(df_ali
 
 #' Title
 #'
-#' @param heat a matrix of correlation as outputted by sensitivity.plot_wrapper()[[2]]
+#' @param heat a matrix of correlation as outputted by sensitivity.plot_wrapper
 #'
 #' @return
 #' @export

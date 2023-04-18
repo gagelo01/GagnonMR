@@ -33,7 +33,7 @@ if(length(values)>0) {
     x[, hgnc_symbol := paste(hgnc_symbol, collapse = " ")]
     vec_res[[i]] <- distinct(x[, .(hgnc_symbol, uniprot_gn_id)]) %>% as.data.table(.)
   }
-  dt_res <- rbindlist(vec_res)
+  dt_res <- data.table::rbindlist(vec_res)
   uniprot_biomart <- rbind(uniprot_biomart, dt_res)
 }
   uniprot_biomart <- uniprot_biomart[!(hgnc_symbol == "hgnc_symbol"),]
@@ -73,7 +73,7 @@ from_genecard_to_generegion <- function(genecard_name, window = 1e+06, gencode =
       as.data.table(.)
     # gene_coords_mart <- gene_coords_mart[chromosome_name %in%  1:22, ]
     colnames(gene_coords_mart) <- c("gene_name", "chr", "start","end")
-    gene_coords <- rbindlist(list(gene_coords, gene_coords_mart),
+    gene_coords <- data.table::rbindlist(list(gene_coords, gene_coords_mart),
                              fill = TRUE)
   }
   gene_coords[, `:=`(start, min(start)), by = "gene_name"]
@@ -585,11 +585,11 @@ get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couc
   }
   arguments<-tidyr::crossing(id.exposure = unique(dat_ld$id.exposure), id.outcome = unique(out_tsmr$id.outcome))
 
-  res <- map(split(arguments, 1:nrow(arguments)), function(x)
+  res <- purrr::map(split(arguments, 1:nrow(arguments)), function(x)
     get_uni_cis_intern(dat_exposure = dat_ld[dat_ld$id.exposure==x$id.exposure],
                        dat_outcome = out_tsmr[out_tsmr$id.outcome==x$id.outcome,],
                        dt_null = dt_null[dt_null$id.exposure==x$id.exposure & dt_null$id.outcome==x$id.outcome])) %>%
-    rbindlist(., fill = TRUE)
+    data.table::rbindlist(., fill = TRUE)
   res <- merge(res, dt_null, by = c("id.exposure", "exposure", "id.outcome", "outcome"), all = TRUE)
 
   return(res)
@@ -613,13 +613,13 @@ get_pan <- function(vcffile_exp, vcffile_out, ldref = "/home/couchr02/Mendel_Com
   chrompos<-NA
   dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = vcffile_exp, vcffile_out = vcffile_out, parameters = parameters)
 
-  rsid <- map(vcffile_exp, function(x) {
+  rsid <- purrr::map(vcffile_exp, function(x) {
     dat_vcf <- gwasvcf::query_gwas(vcf = x, pval = parameters$pan_clumping["pval"])
     if(dim(dat_vcf)[1]==0){return(NULL)}
     return(dat_vcf@assays@data@listData$ID %>% unlist)}) %>%
     unlist(.)
   if(is.null(rsid)){return(dt_null)}
-  dat_tsmr <- map(vcffile_exp, function(x) {
+  dat_tsmr <- purrr::map(vcffile_exp, function(x) {
     dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = x, vcffile_out = NULL, parameters = parameters)
     dat_vcf <- gwasvcf::query_gwas(vcf = x, rsid = rsid,  proxies = "no" )
     if(dim(dat_vcf)[1]==0){return(dt_null)}
@@ -637,7 +637,7 @@ get_pan <- function(vcffile_exp, vcffile_out, ldref = "/home/couchr02/Mendel_Com
   harm$id.exposureoutcome <- paste0(harm$id.exposure,harm$id.outcome)
   harm$fstat.exposure <- GagnonMR::fstat_fromdat(split(harm, harm$id.exposureoutcome))
   harm <- TwoSampleMR::steiger_filtering( harm )
-  res_all <- map(split(harm, f = harm$id.exposureoutcome), function(x) {
+  res_all <- purrr::map(split(harm, f = harm$id.exposureoutcome), function(x) {
     GagnonMR::all_mr_methods(x) %>%
       data.table::as.data.table(.)}) %>% data.table::rbindlist(., fill = TRUE)
   res_all[,c("lci", "uci", "type_of_test"):=NULL]
@@ -723,7 +723,7 @@ get_multicis <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/cou
                                      cochranQ.multi_cis = IVWobject@Heter.Stat[1], cochranQpval.multi_cis = IVWobject@Heter.Stat[2],
                                      nsnp.multi_cis = nrow(x), nsteigerfalse.multi_cis = ndirectionalyinconsistent))
     return(res_multicis)
-  }) %>% rbindlist(., fill = TRUE)
+  }) %>% data.table::rbindlist(., fill = TRUE)
   res_multicis <- merge(res_multicis, dt_null, by = c("id.exposure", "exposure", "id.outcome", "outcome"), all = TRUE)
   return(res_multicis)
 }
@@ -758,9 +758,9 @@ run_all_pqtl_analyses <- function(vcffile_exp, vcffile_out,  chrompos,
   vecexp<-c("get_uni_cis", "get_multicis", "get_pan")
   arguments<-tidyr::crossing(vcffile_exp = vcffile_exp, vcffile_out = vcffile_out) %>% split(., 1:nrow(.))
   res <- lapply(method_list[!(method_list%in%vecexp)], function(meth) {
-    map(arguments, function(x)
+    purrr::map(arguments, function(x)
       get(meth)(vcffile_exp = x$vcffile_exp, vcffile_out = x$vcffile_out, chrompos = chrompos, parameters = parameters)) %>%
-      rbindlist(., fill = TRUE)})
+      data.table::rbindlist(., fill = TRUE)})
 
   res2 <- lapply(method_list[(method_list%in%vecexp)], function(meth) {
     get(meth)(vcffile_exp = vcffile_exp, vcffile_out = vcffile_out, chrompos = chrompos, parameters = parameters) })
@@ -997,7 +997,7 @@ extract_outcome_variant <- function(snps,
 
   stopifnot(gwasvcf::check_bcftools()&gwasvcf::check_plink())
   dt_null<-GagnonMR:::intern_dt_null(vcffile_exp = NULL, vcffile_out = outcomes, parameters = parameters)
-  res <- map(outcomes, function(x) {
+  res <- purrr::map(outcomes, function(x) {
     out_vcf <- tryCatch(
       expr = {gwasvcf::query_gwas(vcf = x, rsid = unique(snps), proxies = proxies, bfile = ldref, tag_r2 = rsq) },
       error = function(e){return(matrix(nrow = 0, ncol = 1))})
@@ -1074,7 +1074,7 @@ intern_dt_null <- function(vcffile_exp, vcffile_out, parameters = default_param(
 #'
 #' @examples
 intern_vcfpath_to_TwoSampelMR_region <- function(vcf, chrompos, type = "exposure", parameters = default_param()) {
-  dat_tsmr <- map(as.list(vcf), function(x) {
+  dat_tsmr <- purrr::map(as.list(vcf), function(x) {
     dt_null<-GagnonMR:::intern_dt_null(vcffile_exp = if(type=="exposure"){x}else{NULL},
                                        vcffile_out = if(type=="outcome"){x}else{NULL},
                                        parameters = parameters)
@@ -1088,7 +1088,7 @@ intern_vcfpath_to_TwoSampelMR_region <- function(vcf, chrompos, type = "exposure
     colnom<-paste0("id.", type)
     dat_tsmr[,(colnom) := gsub(paste(parameters$path, collapse = "|"), "", x) %>% gsub("/.*$|.vcf.gz$", "", .)]
     return(dat_tsmr)
-  }) %>% rbindlist(., fill = TRUE)
+  }) %>% data.table::rbindlist(., fill = TRUE)
 
   return(dat_tsmr)
 }

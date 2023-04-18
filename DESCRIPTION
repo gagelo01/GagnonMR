@@ -33,7 +33,10 @@ Imports:
     susieR,
     purrr,
     stringr,
-    VariantAnnotation
+    VariantAnnotation,
+    ggrepel,
+    pryr,
+    S4Vectors
 Suggests: 
     testthat (>= 3.0.0)
 Remotes:

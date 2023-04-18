@@ -7,7 +7,7 @@
 drawheatmap(heat)
 }
 \arguments{
-\item{heat}{a matrix of correlation as outputted by sensitivity.plot_wrapper()[\link{2}]}
+\item{heat}{a matrix of correlation as outputted by sensitivity.plot_wrapper}
 }
 \value{
 
