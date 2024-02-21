@@ -11,8 +11,9 @@ prepare_for_mvmr(
   clump_kb = 10000,
   harmonise_strictness = 2,
   pval_threshold = 1,
-  clump_exp = NULL,
-  should_clump = TRUE
+  clump_idexp = NULL,
+  should_clump = TRUE,
+  parameters = default_param()
 )
 }
 \arguments{
@@ -28,7 +29,7 @@ prepare_for_mvmr(
 
 \item{pval_threshold}{Instrument detection p-value threshold. Default = 5e-8}
 
-\item{clump_exp}{if NULL clump the SNPs with respect to the lowest P-value corresponding to any of the exposures. Otherwise,
+\item{clump_idexp}{if NULL clump the SNPs with respect to the lowest P-value corresponding to any of the exposures. Otherwise,
 provide the name of the exposure as character. Will clump by selecting the SNP with the lowest p-value for that exposure.
 This procedure should be implemented to select a maximum of strong genetic instruments for that exposure,}
 

@@ -8,7 +8,6 @@ get_hyprcoloc(
   vcffile_exp,
   vcffile_out = NULL,
   chrompos,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
   parameters = default_param()
 )
 }
@@ -18,8 +17,6 @@ get_hyprcoloc(
 \item{vcffile_out}{the path to the outcome vcf.gz file}
 
 \item{chrompos}{the gene region e.g. 1:30000-40000}
-
-\item{ldref}{the path to the ldreferene panel}
 
 \item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }

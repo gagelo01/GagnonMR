@@ -4,13 +4,7 @@
 \alias{get_coloc}
 \title{Perform Coloc analysis}
 \usage{
-get_coloc(
-  vcffile_exp,
-  vcffile_out,
-  chrompos,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
-  parameters = default_param()
-)
+get_coloc(vcffile_exp, vcffile_out, chrompos, parameters = default_param())
 }
 \arguments{
 \item{vcffile_exp}{the path to the exposure}
@@ -18,8 +12,6 @@ get_coloc(
 \item{vcffile_out}{the path to the outcome}
 
 \item{chrompos}{the genetic region ex : "22:25115489-26127836"}
-
-\item{ldref}{the ld reference panel}
 
 \item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }

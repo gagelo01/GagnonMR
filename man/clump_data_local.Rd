@@ -6,9 +6,9 @@
 \usage{
 clump_data_local(
   dat,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
-  clump_kb = 10000,
-  clump_r2 = 0.001,
+  ldref = default_param()$ldref,
+  clump_kb = 1000,
+  clump_r2 = 0.01,
   clump_p = 1
 )
 }

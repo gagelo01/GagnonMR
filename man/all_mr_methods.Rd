@@ -9,7 +9,8 @@ all_mr_methods(
   SignifThreshold = 0.05,
   Primary_mr = "default",
   short = FALSE,
-  skip_presso = FALSE
+  skip_presso = FALSE,
+  tsmr_robust = c("mr_weighted_mode", "mr_weighted_median", "mr_egger_regression")
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ The "random_underdispersion" is the default method in TwoSampleMR.}
 \item{short}{if TRUE only runs egger, weighted mode median and egger if FALSE runs the rest}
 
 \item{skip_presso}{default FALSE. will run MR presso. If True won't run MR presso. MR presso takes load of memory.}
+
+\item{tsmr_robust}{will be passed on the TwoSampleMR::mr function}
 }
 \value{
 a data.frame with results of sensitivity analysis.

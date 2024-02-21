@@ -7,7 +7,7 @@
 get_eQTL(
   tissue,
   gene,
-  mywindow = 1e+06,
+  mywindow = 2e+06,
   mythreshold = 1,
  
     gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt"),

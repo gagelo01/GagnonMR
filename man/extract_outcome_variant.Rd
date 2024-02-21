@@ -7,9 +7,9 @@
 extract_outcome_variant(
   snps,
   outcomes,
+  chrompos = NULL,
   proxies = "yes",
   rsq = 0.8,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
   parameters = default_param()
 )
 }
@@ -18,11 +18,11 @@ extract_outcome_variant(
 
 \item{outcomes}{the path to the vcf file}
 
+\item{chrompos}{NULL if wnat to search the whole genome, otherwise specify in the format "chr:posmin-posmax"}
+
 \item{proxies}{passed to the function gwasvcf::query_gwas}
 
 \item{rsq}{passed to the function gwasvcf::query_gwas}
-
-\item{ldref}{path to plink bed/bim/fam ld reference panel}
 
 \item{parameters}{default_param()}
 }

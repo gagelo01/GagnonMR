@@ -4,13 +4,7 @@
 \alias{get_multicis}
 \title{pipeline clump at 0.6 and correct for ld matrix}
 \usage{
-get_multicis(
-  vcffile_exp,
-  vcffile_out,
-  chrompos,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
-  parameters = default_param()
-)
+get_multicis(vcffile_exp, vcffile_out, chrompos, parameters = default_param())
 }
 \arguments{
 \item{vcffile_exp}{the path to the exposure vcf.gz file}
@@ -18,8 +12,6 @@ get_multicis(
 \item{vcffile_out}{the path to the outcome vcf.gz file}
 
 \item{chrompos}{the gene region e.g. 1:30000-40000}
-
-\item{ldref}{the path to the ldreferene panel}
 
 \item{parameters}{Parameters to be used for various cis-MR methods. Default is output from default_param.}
 }

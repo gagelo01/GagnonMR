@@ -4,20 +4,12 @@
 \alias{get_pan}
 \title{Perform pan (cis + trans) analysis}
 \usage{
-get_pan(
-  vcffile_exp,
-  vcffile_out,
-  ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
-  chrompos = NA,
-  parameters = default_param()
-)
+get_pan(vcffile_exp, vcffile_out, chrompos = NA, parameters = default_param())
 }
 \arguments{
 \item{vcffile_exp}{the path to the exposure vcf.gz file}
 
 \item{vcffile_out}{the path to the outcome vcf.gz file}
-
-\item{ldref}{the path to the ldreference panel}
 
 \item{chrompos}{the genetic region (only a dummy variable to make consitent form with get_uni_cis)}
 

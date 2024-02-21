@@ -4,10 +4,12 @@
 \alias{drawheatmap}
 \title{Title}
 \usage{
-drawheatmap(heat)
+drawheatmap(mat_cor, should_hclust = TRUE)
 }
 \arguments{
-\item{heat}{a matrix of correlation as outputted by sensitivity.plot_wrapper}
+\item{mat_cor}{a matrix of correlation as outputted by sensitivity.plot_wrapper}
+
+\item{should_hclust}{if true will perform a dendrogramm. If false will not.}
 }
 \value{
 

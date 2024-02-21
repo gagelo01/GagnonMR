@@ -7,8 +7,7 @@
 stack_assoc_plot_wrapper(
   df_aligned,
   res_hypr1,
- 
-    ldref = "/mnt/sda/boujer01/Transcriptomique/LDSC_LDREF/1000G_EUR_Phase3_plink/1000G.EUR.QC.all_chr",
+  ldref = default_param()$ldref,
   traits_inorder = unique(df_aligned$exposure),
   build = 37
 )

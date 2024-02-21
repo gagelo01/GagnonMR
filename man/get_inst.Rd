@@ -10,7 +10,6 @@ get_inst(
   clump = TRUE,
   r2 = 0.001,
   kb = 10000,
-  should_write = FALSE,
   parameters = default_param()
 )
 }
@@ -24,8 +23,6 @@ get_inst(
 \item{r2}{the maximum ld r2}
 
 \item{kb}{the clumping kilobases}
-
-\item{should_write}{should write (TRUE or FALSE) the instrument in the vcf directory.}
 
 \item{parameters}{default_param(), that it is possible to change.}
 }
