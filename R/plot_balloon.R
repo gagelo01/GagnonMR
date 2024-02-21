@@ -239,6 +239,251 @@ my_mr_scatter_plot <- function (mr_results, dat,
       axis.text.y.right  = element_blank(),
       panel.border       = element_blank(),
       legend.position=legend.position) +
-    facet_grid(eval(parse(text = equation_facet_grid))) +
+    facet_grid(eval(parse(text = equation_facet_grid)),scales = "free") +
     expand_limits(x = 0, y = 0)
+}
+
+
+#' Title
+#'
+#' @param data must contain column c("b", "lci", "uci", "panel", "colour")
+#' @param col.right the name of the column to put to the right of the plot. They will be placed in the same order
+#' @param col.right.heading the right heading
+#' @param exponentiate TRUE will exponentiate and present a log scale
+#' @param xlab the name of the xlab
+#' @param col.left the name of the column to put to the right of the plot. They will be placed in the same order.
+#' @param col.left.heading the name of the heading.
+#' @param col.toformat the name of the right column to edit with
+#' @param col.header the name of the header to be placed on top of the oher
+#' @param yesleftcol Include left columns.
+#' @param blankrows how to present the blankrows
+#' @parm xlim a vector for the limit of the x axis
+#'
+#' @return
+#' @export
+
+my_forest_fancy <- function(
+    data,
+    col.right = c("pval"),
+    col.right.heading = list(c("Effect (95% CI)", "P value")),
+    exponentiate = TRUE,
+    xlab="",
+    col.left,
+    col.left.heading,
+    col.toformat,
+    col.header,
+    yesleftcol = TRUE,
+    blankrows = c(0,0,0,1),
+    xlim = NULL) {
+  stopifnot(all(c("b", "lci", "uci", "panel", "colour", "shape") %in% colnames(data)))
+  data[, estimate := round(b, digits =2) ]
+  data[, lci := round(lci, digits = 2)]
+  data[, uci :=  round(uci, digits = 2)]
+  data[,pval := formatC(pval, format = "e", digits = 1)%>%gsub("NA", "",.)]
+  # data[, variable := as.character(1:.N), by = "panel"]
+
+  colnom<-c("panel",  col.left, "estimate", "lci", "uci", col.right, col.header, "colour", "shape") %>% unique
+  data <- data[, .SD, .SDcols = colnom]
+
+  leftnorepeat<-col.left[1]
+  list_dat <- split(data, data$panel)
+
+  if(yesleftcol) {
+    list_dat <- map(list_dat, function(doA) {
+      k<-doA[!is.na(get(leftnorepeat)),unique(get(leftnorepeat))]
+      list_data<-vector(mode = "list", length = length(k))
+      for(i in 1:length(k)) {
+        insert <- doA[NA,]
+        insert[,panel:=doA$panel[1]]
+        list_data[[i]]<-rbind(doA[get(leftnorepeat)==k[i],], insert)
+      }
+
+      doA<-rbindlist(list_data)
+      doA<- doA[1:(.N-1),]
+
+      ###format
+      doA[, (col.toformat) := lapply(.SD, GagnonMR:::format_right_var_forest) , .SDcols = col.toformat]
+
+      return(doA)
+    })
+  }
+
+
+  list_dat <- map(list_dat, function(doA) {
+    doA[,variable:=1:.N]
+    doA[,dummy:=as.character(NA)]
+  })
+
+  mylabels <- data.frame(heading1 = as.character(list_dat[[1]][,get(col.header["heading1"])]),
+                         heading2 = as.character(list_dat[[1]][,get(col.header["heading2"])]),
+                         heading3 = as.character(list_dat[[1]][,get(col.header["heading3"])]),
+                         variable = as.character(list_dat[[1]]$variable))
+
+  k<-ckbplotr::make_forest_plot(panels = list_dat,
+                                col.key = "variable",
+                                row.labels = mylabels,
+                                exponentiate = exponentiate,
+                                logscale = exponentiate,
+                                pointsize = 2,
+                                rows = unique(mylabels$heading1),
+                                col.stderr = NULL,
+                                col.lci = "lci",
+                                col.uci = "uci",
+                                col.right = col.right,
+                                col.right.heading = col.right.heading,
+                                col.left         = rev(col.left),
+                                col.left.heading = rev(col.left.heading),
+                                xlab = xlab,#"NAFLD risk per 1 SD \n higher metabolomic measure",
+                                blankrows = blankrows,
+                                colour = "colour", #"colour"
+                                fill = "colour",
+                                panel.headings = levels(data$panel),
+                                scalepoints = FALSE,
+                                envir = environment(),
+                                # cicolour = "grey50",
+                                col.left.hjust = if(is.null(col.left)){1}else{c(0.5, rep(0, length(col.left)-1))},
+                                col.right.hjust = 0.5,
+                                shape = "shape",
+                                ciunder = TRUE,
+                                stroke = 0,
+                                xlim = xlim,
+                                nullval = ifelse(exponentiate == TRUE, 1, 0))#ifelse(exponentiate == TRUE, 1, 0))
+
+  return(k)
+}
+
+
+#' Internal function for my_forest_fancy
+#'
+#' @param input a vector of name
+#'
+#' @return a vector of name that replace repeat with ""
+
+format_right_var_forest <- function(input) {
+  if(is.factor(input)) {
+    message("format_right_var_forest does not accept factor; coercing to character")
+    input<-as.character(input)
+  }
+  myvector<-vector(mode="integer", length = length(input))
+  for(i in 1:length(input)) {
+    input[is.na(input)]<-"dummy"
+    if(i==1) {
+      value = input[i]
+    } else {
+
+      if(input[i-1]!=input[i]){
+        value = input[i]
+      }  else {
+        value = NA
+      }
+
+    }
+    myvector[i]<-value
+  }
+
+  myvector[myvector=="dummy"]<-NA
+  return(myvector)
+}
+
+
+#' Title
+#'
+#' @param data the data.table
+#' @param col.left the name of the column that will be used and put below the header
+#' @param col.header the name of the column that will be used as header
+#' @param col.header.heading the header of the first column
+#' @param effect.name The header of the effect
+#' @param col.right The name of the colomn to be put to the right (after pvalue)
+#' @param exponentiate Should exponentiate or not
+#' @param tm the theme obtained foresploter::forest_theme
+#' @param ... passed to forestploter::forest
+#'
+#' @return
+#' @export
+#'
+#' @examples
+my_forestplotter_fancy <- function(data,
+                                   col.below.header,
+                                   col.header,
+                                   col.header.heading = "",
+                                   col.left = NULL,
+                                   col.left.heading = NULL,
+                                   col.left.toformat = NULL,
+                                   effect.name = "effect (95% CI)",
+                                   col.right = NULL,
+                                   col.right.heading = NULL,
+                                   exponentiate = TRUE,
+                                   tm  = forest_theme(base_size = 10,
+                                                      ci_Theight = 0.4),
+                                   ...
+) {
+  stopifnot(all(c("b", "lci", "uci", "panel") %in% colnames(data)))
+  if(exponentiate==TRUE) {
+    colnom<-c("b", "lci", "uci")
+    data[, (colnom):=map(.SD, exp),.SDcols = colnom]
+  }
+  data[,pval := formatC(pval, format = "e", digits = 1)%>%gsub("NA", "",.)]
+  data[,effect := ifelse(is.na(data$b), "",
+                         sprintf("%.2f (%.2f to %.2f)",
+                                 b, lci, uci)) ]
+  data[,panelnopad:=panel]
+  data[, panel := stringr::str_pad(panel, 25, 'right', ' ')]
+  setnames(data, "effect", effect.name)
+  colnom<-c("panelnopad", "panel",col.header, col.below.header, col.left, "b", "lci", "uci", col.right, effect.name, "pval") %>% unique
+  data <- data[, .SD, .SDcols = colnom]
+  data_panel <- map(split(data, data$panelnopad), function(x) {
+    if(!is.null(col.header)){
+      x[,idnum:=1:.N]
+      x[,idchar:=as.character(idnum)]
+      x[, (col.below.header[1]) := paste0("      ", get(col.below.header[1]))]
+      k<-dcast(x, paste0(col.below.header[1], "+ idnum  ~ ", col.header), value.var = "idchar")
+      k<-k[order(as.numeric(idnum))]
+      k[,idnum:=NULL]
+      colnom <- colnames(k)[colnames(k)!=col.below.header[1]]
+      k <- map(colnom, function(x) c(x, k[,get(x)])) %>% unlist
+      k <- k[!is.na(k)]
+      x <- merge(data.table(subgroup=k), x, by.x = "subgroup", by.y = "idchar", all.x = TRUE, sort = FALSE)
+      x[!is.na(get(col.below.header)), subgroup := get(col.below.header)]
+      x[,(col.header) := NULL]
+      # x[,id:= NULL]
+      # k<-x[,sapply(.SD, is.character)]
+      # tosel <- names(k)[k]
+    }
+    if(!is.null(col.left.toformat)){
+      x[,  (col.left.toformat) := lapply(.SD, GagnonMR:::format_right_var_forest) , .SDcols = col.left.toformat]
+    }
+    colnom <- unique(x$panel[!is.na(x$panel)]) %>% as.character(.)
+    x[,(colnom):=" "]
+    colnom2<-c(col.below.header, col.left, "b", "lci", "uci", colnom, effect.name, "pval",col.right)
+    colnom2<-setdiff(colnom2, col.below.header[1])
+    if(!is.null(col.header)){colnom2<- c("subgroup", colnom2)}
+    x<- x[,.SD, .SDcols = colnom2]
+    x<- x[,lapply(.SD, function(x) ifelse(is.na(x), "", x))]
+    x[," ":= "      "]
+    return(x)
+  })
+
+  nottosel<-which(colnames(data_panel[[1]])%in%c("b","lci","uci"))
+  data_panel2<-map(data_panel, function(x) x[, -nottosel, with = FALSE])
+
+  data_clean <-  purrr::reduce(data_panel2, merge, by = "subgroup", suffixes = c("", " "), sort = FALSE)
+  data_clean <- data_clean[,-length(colnames(data_clean)), with = FALSE]#remove the last col, cause it will always be "    "
+
+  if(!is.null(col.header)){setnames(data_clean, c("subgroup"), c(col.header.heading))}
+  if(!is.null(col.left)){setnames(data_clean, col.left, col.left.heading)}
+  if (!is.null(col.right)) {setnames(data_clean, col.right, col.right.heading)}
+  p <-forestploter::forest(data_clean,
+                           est = map(data_panel, function(x) as.numeric(x$b)),
+                           lower = map(data_panel, function(x) as.numeric(x$lci)),
+                           upper = map(data_panel, function(x) as.numeric(x$uci)),
+                           ci_column = which(grepl(paste(unique(data$panel), collapse = "|"), colnames(data_clean))), #y revenir
+                           sizes = 0.5,
+                           ref_line = ifelse(exponentiate, 1, 0),
+                           x_trans = ifelse(exponentiate, "log", "none"),
+                           nudge_y = 0,
+                           theme = tm,
+                           ...
+  )
+
+  plot(p)
 }
