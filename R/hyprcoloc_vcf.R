@@ -3,13 +3,12 @@
 #' @param vcffile_exp the path to the exposure vcf.gz file
 #' @param vcffile_out the path to the outcome vcf.gz file
 #' @param chrompos the gene region e.g. 1:30000-40000
-#' @param ldref the path to the ldreferene panel
 #' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return
 #' @export
 
-get_hyprcoloc <- function(vcffile_exp, vcffile_out = NULL, chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+get_hyprcoloc <- function(vcffile_exp, vcffile_out = NULL, chrompos,
                           parameters = default_param()) {
   list_vcf <- as.list(c(vcffile_exp, vcffile_out))
   o <- gwasvcf::vcflist_overlaps(vcflist = list_vcf, chrompos = chrompos)
@@ -43,7 +42,7 @@ get_hyprcoloc <- function(vcffile_exp, vcffile_out = NULL, chrompos, ldref = "/h
 
 stack_assoc_plot_wrapper <- function(df_aligned,
                                      res_hypr1,
-                                     ldref = "/mnt/sda/boujer01/Transcriptomique/LDSC_LDREF/1000G_EUR_Phase3_plink/1000G.EUR.QC.all_chr",
+                                     ldref = default_param()$ldref,
                                      traits_inorder = unique(df_aligned$exposure),
                                      build = 37) {
   stopifnot(res_hypr1[,.N==1])
@@ -65,28 +64,28 @@ stack_assoc_plot_wrapper <- function(df_aligned,
     bfile = ldref,
     with_alleles = FALSE)
 
-  df_reshaped <- df_reshaped[SNP %in% rownames(ldmat), ]
-
-  ldmat <- ldmat[df_reshaped$SNP, df_reshaped$SNP] #order in the same way as the marker data.frame
+  top_snp <- res_hypr1[, candidate_snp]
+  if(!(top_snp %in% rownames(ldmat))) {
+    ldmat<-NULL} else {
+      df_reshaped <- df_reshaped[SNP %in% rownames(ldmat), ]
+      ldmat <- ldmat[df_reshaped$SNP, df_reshaped$SNP] #order in the same way as the marker data.frame
+    }
   markers <- df_reshaped[, .(SNP, chr.exposure, pos.exposure)]
   data.table::setnames(markers, colnames(markers), c("marker", "chr", "pos"))
 
   colnom <- colnames(df_reshaped)[grepl("^z\\.", colnames(df_reshaped))]
   zscores<-as.matrix(df_reshaped[, .SD, .SDcols = colnom])
 
-  top_snp <- res_hypr1[, candidate_snp]
-  if(!(top_snp %in% markers$SNP)) {top_snp<-NULL}
 
   res <- gassocplot::stack_assoc_plot(markers = markers,
-                                       z = zscores,
-                                       corr = ldmat,
-                                       traits=rev(traits_inorder),
-                                       top.marker= top_snp)
+                                      z = zscores,
+                                      corr = ldmat,
+                                      traits=rev(traits_inorder),
+                                      top.marker= top_snp)
 
   return(res)
 
 }
-
 
 #' Title
 #'
@@ -113,23 +112,30 @@ sensitivity.plot_wrapper <- function(df_aligned, traits_inorder =  levels(df_ali
 
 #' Title
 #'
-#' @param heat a matrix of correlation as outputted by sensitivity.plot_wrapper
+#' @param mat_cor a matrix of correlation as outputted by sensitivity.plot_wrapper
+#' @param should_hclust if true will perform a dendrogramm. If false will not.
 #'
 #' @return
 #' @export
 
-drawheatmap <- function(heat) {
-  levels <- colnames(heat)
-  heat <- as.data.frame(heat)
+drawheatmap<-function(mat_cor, should_hclust = TRUE) {
+
+  levels <- colnames(mat_cor)
+  heat <- as.data.frame(mat_cor)
   heat$row <- rownames(heat)
-  rownames(heat)<-NULL
+  rownames(heat) <- NULL
   data.table::setDT(heat)
   heat <- data.table::melt(heat, id.vars = "row")
-  heat[,row:=factor(row, levels = rev(levels))]
-  heat[,variable:=factor(variable, levels = rev(levels))]
+  heat[, `:=`(row, factor(row, levels = rev(levels)))]
+  heat[, `:=`(variable, factor(variable, levels = rev(levels)))]
 
-
-
+  if(should_hclust == TRUE) {
+    otter_dendro <- as.dendrogram(hclust(d = dist(x = mat_cor)))
+    otter_order <- order.dendrogram(otter_dendro)
+    heat[,row:=factor(row, levels = row[otter_order], ordered = TRUE)]
+    heat[,variable:=factor(variable, levels = row[otter_order], ordered = TRUE)]
+    heat<- heat[order(row,variable)]
+  }
 
   g <- ggplot2::ggplot(heat, aes(x = variable, tissue, y = row, fill = value))  +
     geom_tile() +
