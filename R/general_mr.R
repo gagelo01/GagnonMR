@@ -52,9 +52,9 @@ convert_exposure_to_outcome <- function (exposure_dat) {
                                           eaf_col = "eaf.exposure", units_col = "units.exposure", ncase_col = "ncase.exposure",
                                           ncontrol_col = "ncontrol.exposure",
                                           samplesize_col = "samplesize.exposure",
-                                          gene_col = "gene.exposure",
+                                          gene_col = "gene.exposure",chr_col =  "chr.exposure", pos_col = "pos.exposure",
                                           id_col = "id.exposure")
-  outcome_dat <- base::merge(outcome_dat, id, by.x = "outcome", by.y = "exposure")
+  outcome_dat <- base::merge(outcome_dat, id, by.x = "outcome", by.y = "exposure", sort = FALSE)
   outcome_dat <- subset(outcome_dat, select = -c(id.outcome))
   names(outcome_dat)[names(outcome_dat) == "id.exposure"] <- "id.outcome"
   return(outcome_dat)
@@ -71,7 +71,7 @@ convert_exposure_to_outcome <- function (exposure_dat) {
 convert_outcome_to_exposure <- function(outcome_dat) {
   id <- subset(outcome_dat, !duplicated(outcome), select = c(outcome,
                                                              id.outcome))
-  outcome_dat <- TwoSampleMR::format_data(outcome_dat, beta_col = "beta.outcome",
+  outcome_dat <- TwoSampleMR::format_data(outcome_dat, beta_col = "beta.outcome", chr_col =  "chr.outcome", pos_col = "pos.outcome",
                                           type = "exposure", se_col = "se.outcome", pval_col = "pval.outcome",
                                           phenotype_col = "outcome", effect_allele_col = "effect_allele.outcome",
                                           other_allele_col = "other_allele.outcome", eaf_col = "eaf.outcome",
