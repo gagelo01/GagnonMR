@@ -85,7 +85,7 @@ calculate_multicis_mr <- function(inst_pqtl, outcome, ldmat ) {
 
 get_eQTL<- function(tissue,
                     gene ,
-                    mywindow = 1e6,
+                    mywindow = 2e6,
                     mythreshold = 1,
                     gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt"),
                     vcf_file = "/mnt/sda/pernic01/eQTL/GTEx8/genotypes/geno_693Indiv_maf_0.01_chr1_22.vcf.gz",
@@ -119,7 +119,6 @@ get_eQTL<- function(tissue,
   colnames(matr)[grep("GTEX-", colnames(matr))] = paste(colnames(matr)[grep("GTEX-", colnames(matr))],
                                                         colnames(matr)[grep("GTEX-", colnames(matr))], sep = "_")
 
-  dir.create(tempdir())
   temp_file <- tempfile()
   fwrite(matr,paste0(temp_file,".bed"),sep="\t",quote=F,row.names=F)
 
@@ -138,7 +137,8 @@ get_eQTL<- function(tissue,
 
   ### traitement du fichier covar
 
-  covar <- as.data.frame(fread(cov_file))
+  covar <- fread(cov_file)
+  covar <- covar[ID %in% c("PC1", "PC2",  "InferredCov 1",  "InferredCov 2", "platform", "sex"),]
   colnames(covar)[grep("GTEX-", colnames(covar))] = paste(colnames(covar)[grep("GTEX-", colnames(covar))],
                                                           colnames(covar)[grep("GTEX-", colnames(covar))], sep = "_")
   colnames(covar)[colnames(covar) == "ID"] = "id"
@@ -167,6 +167,7 @@ get_eQTL<- function(tissue,
                    format(mywindow/2, scientific = F),
                    "--out",
                    paste0(temp_file, "out.txt")))
+
 
   path_qtl <- paste0(temp_file, "out.txt")
   if(!file.exists(path_qtl)) { return(data.table(tissue = tissue,
@@ -200,16 +201,27 @@ get_eQTL<- function(tissue,
 
   QTL[, tissue := tissue]
   QTL[,sample_size := num_suj]
-
   QTL <- QTL[!is.na(QTL$p_val),]
-
-  unlink(mymatr)
-  unlink(paste0(mymatr,".tbi"))
-  unlink(mycovar)
-  unlink(path_qtl)
-  unlink(temp_file)
-  unlink(tempdir(), recursive = TRUE)
-
+  QTL <- merge(QTL, distinct(gencode[,.(gene_id, gene_name)]), by.x = "probe", by.y = "gene_id")
+  QTL <- separate(QTL, col = "variant", into = c("chr_todump", "pos", "other_allele", "effect_allele", "buildtodump")) #https://gtexportal.org/home/eqtlDashboardPage
+  QTL[,c("top_variant", "zscore", "start_top_variant", "end_top_variant", "buildtodump", "chr_todump", "chr_top_variant",
+         "start","end", "strand", "n_cis_variant_tested", "distance_probe_variant") := NULL]
+  QTL[,pos:=as.integer(pos)]
+  system2(command = "plink2", args = c("--vcf",
+                                       vcf_file,
+                                       "--freq",
+                                       "--chr", as.numeric(chr),
+                                       "--from-bp", mystart-(mywindow/2),
+                                       "--to-bp", myend+(mywindow/2),
+                                       "--out", paste0(temp_file)))
+  dt_freq<-fread(paste0(temp_file, ".afreq"))
+  dt_freq[, pos := stringr::word(dt_freq$ID, 2, sep = "_") %>% as.integer]
+  setnames(dt_freq, c("#CHROM", "REF", "ALT"), c("chr", "other_allele", "effect_allele"))
+  dt_freq[,chr:=as.integer(chr)]
+  QTL <- merge(QTL, dt_freq, by = c("chr", "pos", "other_allele", "effect_allele"))
+  QTL[,c("OBS_CT", "ID"):=NULL]
+  setnames(QTL, "ALT_FREQS", "eaf")
+  QTL[,exposure:= paste0(tissue, "-", gene_name)]
   return(QTL)
 }
 
@@ -226,6 +238,7 @@ format_gtex_data <- function(exposures,
                              translation = fread("/mnt/sda/couchr02/1000G_Phase3/1000G_Phase3_b38_rsid_maf_small.txt"), #b38
                              traduction, #b37
                              gencode = fread("/home/couchr02/Mendel_Commun/Christian/GTEx_v8/gencode.v26.GRCh38.genes.txt")) {
+  message("this function is deprecated you could use formattovcf_createindex2 instead")
   setnames(gencode, "gene_id", "ensembl_gene_id", skip_absent = TRUE)
   data_eQTL <- separate(exposures, col = "variant", into = c("chr_todump", "pos_todump", "other_allele", "effect_allele", "buildtodump")) #https://gtexportal.org/home/eqtlDashboardPage
   data_eQTL <- merge(data_eQTL, translation[,.(rsid, chr, pos_b38)], by.x = c("chr_top_variant", "start_top_variant"),
@@ -266,8 +279,6 @@ format_gtex_data <- function(exposures,
   #return
   return(data_eqtl)
 }
-
-
 
 #' Format from TwoSampleMR to coloc
 #'
