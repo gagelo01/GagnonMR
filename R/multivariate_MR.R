@@ -110,29 +110,29 @@ align_list_exposure_mvmr <- function(list_inst_mvmr, action = 2) {
 #' @param clump_kb The default is 10000
 #' @param harmonise_strictness See the action option of harmonise_data. The default is 2.
 #' @param pval_threshold Instrument detection p-value threshold. Default = 5e-8
-#' @param clump_exp if NULL clump the SNPs with respect to the lowest P-value corresponding to any of the exposures. Otherwise,
+#' @param clump_idexp if NULL clump the SNPs with respect to the lowest P-value corresponding to any of the exposures. Otherwise,
 #' provide the name of the exposure as character. Will clump by selecting the SNP with the lowest p-value for that exposure.
 #' This procedure should be implemented to select a maximum of strong genetic instruments for that exposure,
 #' @param should_clump if TRUE clump if FALSE don't
 #' @return an object very similar to exposure_dat (theinput), but ready to go further in the mvmr pipeline
 #' @export
 prepare_for_mvmr<- function (exposure_dat, d1, clump_r2 = 0.001, clump_kb = 10000, harmonise_strictness = 2,
-                             pval_threshold = 1, clump_exp = NULL, should_clump = TRUE)  {
+                             pval_threshold = 1, clump_idexp = NULL, should_clump = TRUE, parameters = default_param())  {
   if(should_clump) {
-    if(is.null(clump_exp)) {
+    if(is.null(clump_idexp)) {
       temp <- exposure_dat
       temp$id.exposure <- 1
       temp <- temp[order(temp$pval.exposure, decreasing = FALSE),]
       temp <- subset(temp, !duplicated(SNP))
     }else{
       temp <- d1
-      temp <- temp[exposure == clump_exp,]
+      temp <- temp[id.exposure == clump_idexp,]
       temp <- subset(temp, !duplicated(SNP))
     }
     inst_all_clump = ieugwasr::ld_clump(data.frame(rsid=temp$SNP,pval=temp$pval.exposure, id = temp$id.exposure),
                                         clump_kb=clump_kb,clump_r2=clump_r2,
                                         plink_bin=genetics.binaRies::get_plink_binary(),
-                                        bfile="/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs")
+                                        bfile=parameters$ldref)
     exposure_dat <- subset(exposure_dat, SNP %in%     inst_all_clump$rsid)
   }
 
@@ -168,26 +168,28 @@ mv_multiple_MendelianRandomization <- function(exposure_outcome_harmonized, phen
   x <- exposure_outcome_harmonized
   mriobj <- MendelianRandomization::mr_mvinput(bx = x$exposure_beta,
                                                bxse = x$exposure_se, by = x$outcome_beta, byse = x$outcome_se,
-                                               exposure = x$expname$exposure, outcome = x$outname$outcome)
+                                               exposure = x$expname$id.exposure, outcome = x$outname$id.outcome)
   mvmr_res <- vector(mode = "list", length = 2)
   x <- MendelianRandomization::mr_mvivw(object = mriobj, model = "default", robust = FALSE)
-  ivwestimate <- data.frame(exposure = x@Exposure,
-                            outcome = x@Outcome, b = x@Estimate,
+  ivwestimate <- data.frame(id.exposure = x@Exposure,
+                            id.outcome = x@Outcome, b = x@Estimate,
                             se = x@StdError, lci = x@CILower,
                             uci = x@CIUpper, pval = x@Pvalue,
                             cochranQ = x@Heter.Stat[1], cochranQpval = x@Heter.Stat[2],
                             nsnp = x@SNPs, method = "Multivariable IVW") %>% as.data.table
+  ivwestimate <- merge(ivwestimate, exposure_outcome_harmonized$expname, by = "id.exposure")
+  ivwestimate <- merge(ivwestimate, exposure_outcome_harmonized$outname, by = "id.outcome")
 
   sres2  <- obtain_conditionalFstatistics(exposure_outcome_harmonized, pheno_cov_exp)
-  if(only_IVW == TRUE) { return(merge(ivwestimate, sres2, by = "exposure", sort = FALSE))}
+  if(only_IVW == TRUE) { return(merge(ivwestimate, sres2[,c("id.exposure", "F_stastistics")], by = "id.exposure", sort = FALSE))}
 
   x <- MendelianRandomization::mr_mvegger(object = mriobj)
-  eggerestimate <- data.frame(exposure = x@Exposure, outcome = x@Outcome, b = x@Estimate,
+  eggerestimate <- data.frame(id.exposure = x@Exposure, id.outcome = x@Outcome, b = x@Estimate,
                               se = x@StdError.Est, lci = x@CILower.Est, uci = x@CIUpper.Est, pval = x@Pvalue.Est,
                               cochranQ = x@Heter.Stat[1], cochranQpval = x@Heter.Stat[2],
                               nsnp = x@SNPs, method = "Multivariable Egger") %>% as.data.table
 
-  eggerintercept <- data.frame(exposure = x@Exposure, outcome = x@Outcome, b = x@Intercept,
+  eggerintercept <- data.frame(id.exposure = x@Exposure, id.outcome = x@Outcome, b = x@Intercept,
                                se = x@StdError.Int, lci = x@CILower.Int, uci = x@CIUpper.Int, pval = x@Pvalue.Int,
                                nsnp = x@SNPs, method = "Multivariable Egger Intercept") %>% as.data.table
 
@@ -197,8 +199,8 @@ mv_multiple_MendelianRandomization <- function(exposure_outcome_harmonized, phen
     error = function(e){return(NULL) })
 
   resmvmr  <- lapply(mvmr_res, function(x) {
-    res_mvmr <- data.frame(exposure = x@Exposure,
-                           outcome = x@Outcome, b = x@Estimate,
+    res_mvmr <- data.frame(id.exposure = x@Exposure,
+                           id.outcome = x@Outcome, b = x@Estimate,
                            se = x@StdError, lci = x@CILower,
                            uci = x@CIUpper, pval = x@Pvalue,
                            nsnp = x@SNPs) %>% as.data.table
@@ -211,8 +213,11 @@ mv_multiple_MendelianRandomization <- function(exposure_outcome_harmonized, phen
   }
   resmvmr <- rbindlist(resmvmr)
 
-  resmvmr <-rbindlist(list(ivwestimate, resmvmr,eggerestimate, eggerintercept), fill = TRUE)
-  resmvmr <- merge(resmvmr, sres2, by = "exposure", sort = FALSE)
+  resmvmr <-rbindlist(list(resmvmr,eggerestimate, eggerintercept), fill = TRUE)
+  resmvmr <- merge(resmvmr, exposure_outcome_harmonized$expname, by = "id.exposure")
+  resmvmr <- merge(resmvmr, exposure_outcome_harmonized$outname, by = "id.outcome")
+  resmvmr <- rbind(ivwestimate, resmvmr)
+  resmvmr <- merge(resmvmr, sres2, by = c("id.exposure", "exposure"), sort = FALSE)
   return(resmvmr)
 }
 
@@ -235,8 +240,57 @@ obtain_conditionalFstatistics <- function(exposure_outcome_harmonized, pheno_cov
   diag(mvmrcovmatrix) <-  1
   Xcovmat<- MVMR::phenocov_mvmr(mvmrcovmatrix,F.data[, .SD,.SDcols = which(grepl("sebetaX", colnames(F.data)))])
   sres2 <- MVMR::strength_mvmr(r_input = F.data, gencov = Xcovmat)
-  colnames(sres2) <- mv_harm$expname$exposure
+  colnames(sres2) <- mv_harm$expname$id.exposure
   rownames(sres2) <- NULL
-  sres2 <- data.frame(exposure = colnames(sres2), F_stastistics = as.numeric(sres2[1,]))
+  sres2 <- data.frame(id.exposure = colnames(sres2),
+                      exposure = mv_harm$expname$exposure,
+                      F_stastistics = as.numeric(sres2[1,]))
   return(sres2)
+}
+
+#' Title
+#'
+#' @param id_exposure_vec The vector of id.exposure to include, but will be added as "exposure" which means their instruments will be selected
+#' @param id_outcome_vec The vector of id.outcome to include
+#' @param correctfor The vector of id.exposure to include,  but will be added as "correctfor" which means there instruments won't be selected
+#' @param inst_all_sign_clump  A data.frame of significant instrument for example the output of TwoSampleMR::extract_instruments(c("ukb-b-19953", "ukb-b-9405"))
+#' @param all_inst_mvmr A data.frame of the effect of all SNP present in inst_all_sign_clump, for the exposures
+#' @param all_outcome_mvmr A data.frame of the effect of all SNP present in inst_all_sign_clump, for the outcomes
+#' @param pval_threshold The pvalue theshold to clump I recommend keeping 1.
+#' @param clump_idexp_arg #clump_exp_arg either none, first, second, or the id.exposure. Clump respective to all exposures (none), the first or second exposure, or the given id.exposure.
+#' @param should_clump TRUE or FALSE
+#' @param clump_r2
+#' @param clump_kb
+#' @param paramaters
+#'
+#' @return
+#' @export
+#'
+#' @examples
+performmvmr <- function(id_exposure_vec, id_outcome_vec, correctfor=NULL,
+                        inst_all_sign_clump, all_inst_mvmr,
+                        all_outcome_mvmr,
+                        pval_threshold = 1,
+                        clump_idexp_arg = "none",
+                        should_clump = TRUE,
+                        clump_r2 = 0.01,
+                        clump_kb = 1000,
+                        parameters = default_param())  {
+
+  message(paste0("MVMR for the effect of ", paste(id_exposure_vec, collapse = " + "), " on ", id_outcome_vec, " while correcting for ",  paste(correctfor, collapse = " + ")))
+  exposure_dat <- inst_all_sign_clump[inst_all_sign_clump$id.exposure %in% id_exposure_vec,]
+  k<-all_inst_mvmr[(all_inst_mvmr$id.exposure %in% correctfor) & (all_inst_mvmr$SNP %in% unique(exposure_dat$SNP)),]
+  exposure_dat<- rbind(exposure_dat,k, fill = TRUE)
+  d1 <- all_inst_mvmr[(all_inst_mvmr$id.exposure %in% c(id_exposure_vec,correctfor)) & (all_inst_mvmr$SNP %in% unique(exposure_dat$SNP)),]
+
+  if(clump_idexp_arg == "none") {clump_idexp<-NULL} else if(clump_idexp_arg == "first"){clump_idexp<-id_exposure_vec[1]} else if(clump_idexp_arg == "second"){clump_idexp<-id_exposure_vec[2]}else {clump_idexp<-clump_idexp_arg}
+  inst_mvmr <- prepare_for_mvmr(exposure_dat = exposure_dat, d1 =d1,clump_r2 = clump_r2, clump_kb = clump_kb, pval_threshold = pval_threshold, clump_idexp = clump_idexp, harmonise_strictness = 1, should_clump = should_clump, parameters = parameters)
+
+  exposure_outcome_harmonized <- TwoSampleMR::mv_harmonise_data(exposure_dat = inst_mvmr,
+                                                                outcome_dat = all_outcome_mvmr[all_outcome_mvmr$id.outcome == id_outcome_vec,],
+                                                                harmonise_strictness = 1)
+  mvmr_results <- GagnonMR::mv_multiple_MendelianRandomization(exposure_outcome_harmonized = exposure_outcome_harmonized)
+  mvmr_results$clump_exposure <- mvmr_results$clump_idexp %>% ifelse(is.null(.), "none", .)
+  mvmr_results$correctfor <- paste(correctfor, collapse = " + ")
+  return(mvmr_results)
 }
