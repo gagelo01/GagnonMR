@@ -89,3 +89,73 @@ gwasvcf_to_finemapr_gagnon <- function (region, vcf, bfile, plink_bin = genetics
   return(out)
 }
 
+
+#' provide vcf path and get coloc input
+#'
+#' @param vcf1 dah
+#' @param vcf2 if vcf2 is NULL will simply format vcf1 in the coloc format which is usefull for CoPheScan
+#' @param chrompos  dah
+#' @param parameters dah
+#'
+#' @return
+#' @export
+#'
+
+gwasvcf_to_coloc_input <- function (vcf1, vcf2 = NULL, chrompos, parameters = default_param()) {
+  if(is.null(vcf2)) {
+    o <-  list(gwasvcf::query_gwas(vcf = vcf1, chrompos = chrompos))
+  } else {
+    o <- gwasvcf::vcflist_overlaps(list(vcf1, vcf2), chrompos)
+    stopifnot(length(o[[1]]) == length(o[[2]]))}
+
+  if (any(map_lgl(o, function(x) length(x)==0))) {
+    message("No SNPs")
+    return(NULL)
+  }
+
+  dtnull <- lapply(list(vcf1,vcf2), function(x) {
+    GagnonMR:::intern_dt_null(vcffile_exp = x, vcffile_out = NULL,
+                              parameters = parameters)
+  }) %>% data.table::rbindlist(., fill = TRUE)
+
+
+  dt <- lapply(o, gwasglue::gwasvcf_to_TwoSampleMR) %>% data.table::rbindlist(.,
+                                                                              fill = TRUE)
+  data.table::setDT(dt)
+  dt[,chr.exposure:=chr.exposure%>%as.character(.)%>%as.integer(.)]
+  dtnull[, todump := dt$id.exposure %>% unique]
+  dt <- merge(dtnull[, .(id.exposure, todump)], dt, by.x = "todump",
+              by.y = "id.exposure", sort = FALSE)
+  dt[, todump := NULL]
+
+  if(!is.null(vcf2)) {
+    k <- GagnonMR::prepare_for_mvmr(dt, dt, harmonise_strictness = 1,
+                                    should_clump = FALSE)} else{k<-dt}
+  k <- split(dt, by = "id.exposure")
+
+
+  type <-  map(o, function(x) ifelse(VariantAnnotation::header(x) %>% VariantAnnotation::meta() %>%
+                                       {
+                                         .[["SAMPLE"]][["StudyType"]]
+                                       } == "Continuous", "quant", "cc"))
+
+  out<-   map(1:length(o), function(i) {
+    out <- k[[i]] %>% {
+      list(pvalues = .$pval.exposure, N = .$samplesize.exposure,
+           MAF = .$eaf.exposure %>% ifelse(.<0.5, ., 1-.),
+           beta = .$beta.exposure,
+           varbeta = .$se.exposure^2, type = type[[i]], snp = .$SNP,
+           z = .$beta.exposure/.$se.exposure, chr = .$chr.exposure,
+           pos = .$pos.exposure, id = .$id.exposure)
+    }
+
+    if (type[[i]] == "cc") {
+      out$s <- mean(k[[i]]$ncase.exposure/k[[i]]$samplesize.exposure, na.rm = TRUE)
+    }
+    return(out)
+  })
+  # names(out)<-c("dataset1", "dataset2")
+  return(out)
+}
+
+
