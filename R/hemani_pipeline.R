@@ -81,7 +81,7 @@ from_genecard_to_generegion <- function(genecard_name, window = 1e+06, gencode =
   gene_coords[, `:=`(gene_name, paste0(unique(gene_name), collapse = "-")),
               by = "gene_name"]
   gene_coords <- gene_coords %>% distinct(.)
-  # gene_coords <- gene_coords[chr %in% 1:22, ]
+
   setDT(gene_coords)
   if (gene_coords[, .N] == 0) {
     return(NA)
@@ -91,6 +91,7 @@ from_genecard_to_generegion <- function(genecard_name, window = 1e+06, gencode =
   gene_coords[, end_cis := (end + window/2)]
   gene_region <- sapply(genecard_name, function(x) {
     k <- gene_coords[gene_name %in% strsplit(x, split = " ")[[1]],]
+    k <- k[chr%in%c("X", "Y", "M", as.character(1:23)),]
     if(nrow(k)==0){return(NA)}
     gene_region <- k[,paste0(unique(chr), ":", min(start_cis), "-", max(end_cis))]
     return(gene_region)})
@@ -369,11 +370,13 @@ formattovcf_createindex2 <- function(all_out,
   stopifnot(is.numeric(year))
   stopifnot(sex %in% c("Males and Females", "Males", "Females"))
   stopifnot(population %in% c("European", "African", "South Asian", "Asian unspecified",
-                              "East Asian","Mixed", "Mix", "Hispanic or Latin American"))
+                              "East Asian","Mixed", "Hispanic or Latin American"))
   if(initial_build != "HG19/GRCh37") {message("input must be in HG19/GRCh37. Please map the summary statistic to this build")}
   stopifnot(initial_build %in% c("HG19/GRCh37", "HG38/GRCh38", "HG18/Build36"))
   stopifnot(category %in% c("protein", "eqtl", "Metabolites","Trait","Disease"))
   stopifnot(is.numeric(pmid))
+  if(all_out[,any(get(se_col)==0)]){stop("Error : the coloumn standard errors contain value 0, verify or replace by 4.9e-324 : the lowest value in R")}
+  if(!is.null(eaf_col)){if(all_out[,any(get(eaf_col)<0.0001|get(eaf_col)>0.9999)]){stop("Error : the coloumn eaf_col contain value < 0.0001 or value > 0.9999, the conversion to VCF will transfor these value into zeros and ones. Which will lead to problems further down the pipeline. I recommend changing these values for 0.0001 or 0.9999")}}
   if(!is.null(traduction)) {
     if(0 %in% traduction[1:1000,]$eur_eaf) {stop("Error: traduction cannot contain 0. You should replace by 0.001") }
     if( 1 %in% traduction[1:1000,]$eur_eaf) {stop("Error: traduction cannot contain 1. You should replace by 0.999")}
@@ -386,9 +389,9 @@ formattovcf_createindex2 <- function(all_out,
   if(any(k)){stop(paste0("Error: column --", paste(names(k)[k==TRUE], collapse = "-- and --"), "-- contains NA. Please verify and potentially remove these rows."))}
   if(!is.null(snp_col)){
     if(all_out[,any(!grepl("^rs", get(snp_col)))]) {stop("Error: SNP column contains rsid that do not start by 'rs'")}}
-  if(!(is.null(ncase_col)&is.null(ncontrol_col)) & units != "log odds") {stop("Error: When trait is continuous, ncase_col and ncontrol_col should be NULL")}
+  if(!(is.null(ncase_col)|is.null(ncontrol_col)) & units != "log odds") {stop("Error: When trait is continuous, ncase_col and ncontrol_col should be NA")}
   if(!is.null(pos_b37_col)&!is.null(pos_b38_col)) {stop("Error: you can only provide one of pos_b37_col and pos_b38_col. The other must be NULL")}
-  stopifnot(all(c("chr","pos_b38","other_all","effect_all", "rsid", "pos_b37", "eur_eaf") %in% colnames(traduction)))
+  if(!is.null(traduction)){stopifnot(all(c("chr","other_all","effect_all", "rsid", "eur_eaf") %in% colnames(traduction)))}
   #including all_out
   all_out[,outcome := outcome_name]
   oldname <- c(snp_col, beta_col, se_col, pval_col, effect_allele_col, other_allele_col, chr_col, pos_b37_col, pos_b38_col, eaf_col, maf_col)
@@ -426,6 +429,7 @@ formattovcf_createindex2 <- function(all_out,
       all_out <- merge(all_out, traduction, by.x = c("chrom", "pos"), by.y = c("chr", "pos_b38"), all = FALSE)
       all_out[,pos := pos_b37]
     }
+    if(is.null(snp_col)) {setnames(all_out, "rsid", "snp")}
 
     all_out <- all_out[(effect_allele == other_all | effect_allele == effect_all) & (other_allele == other_all | other_allele == effect_all) & other_all != effect_all  & effect_allele != other_allele, ] #because low number removed, coded on the forward strand
     all_out <- all_out[chrom %in% 1:22, ]
@@ -439,6 +443,7 @@ formattovcf_createindex2 <- function(all_out,
     all_out[other_allele == effect_all, other_allele := other_all]
     if(!is.null(maf_col)) {all_out[, eaf := ifelse(eur_eaf < 0.5, maf, 1-maf)]}
     if(is.null(maf_col) & is.null(eaf_col)) {all_out[, eaf := eur_eaf]}
+    all_out <- all_out[!is.na(eaf),]
 
 
   } else {
@@ -529,40 +534,39 @@ get_data_from_mrbase <- function(id, out_wd = "/mnt/sda/gagelo01/Vcffile/MRBase_
 #' @param vcffile_exp the path to the exposure
 #' @param vcffile_out the path to the outcome
 #' @param chrompos the genetic region ex : "22:25115489-26127836"
-#' @param ldref the ld reference panel
 #' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return
 #' @export
 
-get_coloc <- function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+get_coloc <- function(vcffile_exp, vcffile_out, chrompos,
                       parameters = default_param()) {
   message("initializing coloc")
+  stopifnot(gwasvcf::check_bcftools())
+  stopifnot(gwasvcf::check_plink())
   stopifnot(length(vcffile_exp) == 1)
   dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = vcffile_exp, vcffile_out = vcffile_out,
                                        parameters = parameters)
-  vout <- GagnonMR::gwasvcf_to_coloc_eloi(vcffile_exp, vcffile_out,
-                                          chrompos)
+  vout <- GagnonMR::gwasvcf_to_coloc_input(vcffile_exp, vcffile_out,
+                                           chrompos, parameters = parameters)
   if (is.null(vout)) {
     return(dt_null)
   }
-  dt_res <- get_coloc_intern(vout = vout, dt_null = dt_null)
+  dt_res <- GagnonMR:::get_coloc_intern(vout = vout, dt_null = dt_null)
   return(dt_res)
 }
-
 
 #' Perform lead variant cis analysis
 #'
 #' @param vcffile_exp the path to the exposure .vcf.gz file
 #' @param vcffile_out the path to the outcome .vcf.gz file
 #' @param chrompos the gene region e.g. 1:30000-40000
-#' @param ldref the path to the ldreference panel
 #' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return a data.table of results
 #' @export
 
-get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos,
                          parameters = default_param()) {
   message("initializing uni-cis MR")
   stopifnot(gwasvcf::check_bcftools()&gwasvcf::check_plink())
@@ -574,7 +578,7 @@ get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couc
   if (dim(dat_ld)[1] == 0) {return(dt_null)}
   dat_ld <- dat_ld[,.SD[which.min(pval.exposure)], by = "id.exposure"]
   out_tsmr <- GagnonMR::extract_outcome_variant(snps =  dat_ld$SNP, outcomes = vcffile_out,
-                                                ldref = ldref, parameters = parameters)
+                                                parameters = parameters)
 
   if(ncol(out_tsmr)==2){
     k <- GagnonMR::convert_exposure_to_outcome(dat_ld)
@@ -599,38 +603,22 @@ get_uni_cis <-  function(vcffile_exp, vcffile_out, chrompos, ldref = "/home/couc
 #'
 #' @param vcffile_exp the path to the exposure vcf.gz file
 #' @param vcffile_out the path to the outcome vcf.gz file
-#' @param ldref the path to the ldreference panel
 #' @param chrompos the genetic region (only a dummy variable to make consitent form with get_uni_cis)
 #' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return a data.table of pan anaysis
 #' @export
 
-get_pan <- function(vcffile_exp, vcffile_out, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs", chrompos = NA,
+get_pan <- function(vcffile_exp, vcffile_out, chrompos = NA,
                     parameters = default_param()) {
   message("initializing pan mr")
   stopifnot(gwasvcf::check_bcftools()&gwasvcf::check_plink())
   chrompos<-NA
-  dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = vcffile_exp, vcffile_out = vcffile_out, parameters = parameters)
 
-  rsid <- purrr::map(vcffile_exp, function(x) {
-    dat_vcf <- gwasvcf::query_gwas(vcf = x, pval = parameters$pan_clumping["pval"])
-    if(dim(dat_vcf)[1]==0){return(NULL)}
-    return(dat_vcf@assays@data@listData$ID %>% unlist)}) %>%
-    unlist(.)
-  if(is.null(rsid)){return(dt_null)}
-  dat_tsmr <- purrr::map(vcffile_exp, function(x) {
-    dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = x, vcffile_out = NULL, parameters = parameters)
-    dat_vcf <- gwasvcf::query_gwas(vcf = x, rsid = rsid,  proxies = "no" )
-    if(dim(dat_vcf)[1]==0){return(dt_null)}
-    dat_tsmr <- dat_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(., "exposure") %>% data.table::as.data.table(.)
-    dat_tsmr$id.exposure <- gsub(paste(parameters$path, collapse = "|"), "", x) %>% gsub("/.*$|.vcf.gz$", "", .)
-    dat_tsmr <- GagnonMR::clump_data_local(dat_tsmr, ldref = ldref,
-                                           clump_kb = parameters$pan_clumping["kb"],
-                                           clump_r2 = parameters$pan_clumping["r2"])
-    return(dat_tsmr)}) %>% data.table::rbindlist(., fill = TRUE)
+  dat_tsmr <- intern_inst_pan(vcffile_exp = vcffile_exp, parameters = parameters)
+  if(ncol(dat_tsmr)==2){return(dat_tsmr)}
 
-  out_tsmr <- GagnonMR::extract_outcome_variant(snps = rsid, outcomes = vcffile_out, ldref = ldref, parameters = parameters)
+  out_tsmr <- GagnonMR::extract_outcome_variant(snps = unique(dat_tsmr$SNP), outcomes = vcffile_out, parameters = parameters)
 
   harm <- TwoSampleMR::harmonise_data(dat_tsmr, out_tsmr, action = 1)
   harm <- TwoSampleMR::add_rsq(harm)
@@ -645,6 +633,45 @@ get_pan <- function(vcffile_exp, vcffile_out, ldref = "/home/couchr02/Mendel_Com
   setnames(res_all, k, paste0("pan_", k))
   return(res_all)
 }
+
+#' Title
+#'
+#' @param vcffile_exp the path to the exposure vcf.gz file
+#' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
+#'
+#' @return
+
+intern_inst_pan <- function(vcffile_exp,
+                            parameters = default_param()) {
+  message(paste0("selecting instrument with ",
+                 paste0(names(parameters$pan_clumping), "=", parameters$pan_clumping, collapse = "; ")))
+  stopifnot(gwasvcf::check_bcftools()&gwasvcf::check_plink())
+  chrompos<-NA
+  dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = vcffile_exp, vcffile_out = NULL, parameters = parameters)
+
+  rsid <- purrr::map(vcffile_exp, function(x) {
+    dat_vcf <- gwasvcf::query_gwas(vcf = x, pval = parameters$pan_clumping["pval"])
+    if(dim(dat_vcf)[1]==0){return(NULL)}
+    return(dat_vcf %>% VariantAnnotation::expand(.) %>%
+             SummarizedExperiment::rowRanges(.) %>%
+             names(.))}) %>%
+    unlist(.)
+  if(!is.null(parameters$snp_bim)){rsid<-rsid[rsid%in%parameters$snp_bim]}
+  if(is.null(rsid)){return(dt_null)}
+  dat_tsmr <- purrr::map(vcffile_exp, function(x) {
+    dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = x, vcffile_out = NULL, parameters = parameters)
+    dat_vcf<- gwasvcf::query_gwas(vcf = x, rsid = rsid,  proxies = "no" )
+    if(dim(dat_vcf)[1]==0){return(dt_null)}
+    dat_tsmr <- dat_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(., "exposure") %>% data.table::as.data.table(.)
+    dat_tsmr$id.exposure <- gsub(paste(parameters$path, collapse = "|"), "", x) %>% gsub("/.*$|.vcf.gz$", "", .)
+    dat_tsmr <- GagnonMR::clump_data_local(dat_tsmr, ldref = parameters$ldref,
+                                           clump_kb = parameters$pan_clumping["kb"],
+                                           clump_r2 = parameters$pan_clumping["r2"])
+    return(dat_tsmr)}) %>% data.table::rbindlist(., fill = TRUE)
+
+  return(dat_tsmr)
+}
+
 
 #' Get reverse MR
 #'
@@ -669,13 +696,12 @@ get_reverseMR <- function(vcffile_exp, vcffile_out, chrompos = NA, parameters = 
 #' @param vcffile_exp the path to the exposure vcf.gz file
 #' @param vcffile_out the path to the outcome vcf.gz file
 #' @param chrompos the gene region e.g. 1:30000-40000
-#' @param ldref the path to the ldreferene panel
 #' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return a data.table of the results
 #' @export
 
-get_multicis <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+get_multicis <- function(vcffile_exp, vcffile_out,  chrompos,
                          parameters = default_param()) {
   message("initializing multicis mr")
   stopifnot(gwasvcf::check_bcftools()&gwasvcf::check_plink())
@@ -684,14 +710,16 @@ get_multicis <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/cou
   rsid <- dat_tsmr[dat_tsmr$pval.exposure<5e-8, ]$SNP
   dat_tsmr<-dat_tsmr[dat_tsmr$SNP%in%rsid,]
   if (dim(dat_tsmr)[1] == 0) {return(dt_null)}
-  dat_tsmr <- GagnonMR::clump_data_local(dat_tsmr, ldref =ldref, clump_r2 = parameters$multicis_clumping["clump_r2"],
+  dat_tsmr <- GagnonMR::clump_data_local(dat_tsmr, ldref =parameters$ldref, clump_r2 = parameters$multicis_clumping["clump_r2"],
                                          clump_kb = parameters$multicis_clumping["clump_kb"],
                                          clump_p = parameters$multicis_clumping["clump_p"])
 
   out_tsmr <- extract_outcome_variant(snps =  dat_tsmr$SNP, outcomes = vcffile_out,
-                                      ldref = ldref, parameters = parameters)
+                                      parameters = parameters)
 
-  ldmat <- ieugwasr::ld_matrix_local(unique(dat_tsmr$SNP), plink_bin = genetics.binaRies::get_plink_binary(), bfile = ldref)
+  ldmat <- ieugwasr::ld_matrix_local(unique(dat_tsmr$SNP),
+                                     plink_bin = genetics.binaRies::get_plink_binary(),
+                                     bfile = parameters$ldref)
 
   arguments<-  dt_null
   res_multicis <- lapply(split(arguments, 1:arguments[,.N]), function(x) {
@@ -781,7 +809,7 @@ run_all_pqtl_analyses <- function(vcffile_exp, vcffile_out,  chrompos,
 #' @return a clumped data.frame
 #' @export
 
-clump_data_local <- function(dat, ldref ="/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs", clump_kb = 1e4, clump_r2 = 0.001,
+clump_data_local <- function(dat, ldref = default_param()$ldref, clump_kb = 1e3, clump_r2 = 0.01,
                              clump_p =1){
   d <- dat %>% dplyr::select(rsid=SNP, pval=pval.exposure, id = id.exposure)
   out <- ieugwasr::ld_clump(d, plink_bin=genetics.binaRies::get_plink_binary(), bfile=ldref, clump_kb = clump_kb, clump_r2 = clump_r2, clump_p = clump_p)
@@ -794,15 +822,13 @@ clump_data_local <- function(dat, ldref ="/home/couchr02/Mendel_Commun/Christian
 #'
 #' @param vcffile a vcf-file path
 #' @param chrompos chrompos
-#' @param ldref th ld reference panel
 #' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return an object of class susie
 #' @export
 get_susie <- function(vcffile, chrompos,
-                      ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
                       parameters = default_param()) {
-  dat <- GagnonMR::gwasvcf_to_finemapr_gagnon(region = chrompos, vcf = vcffile, bfile = ldref)
+  dat <- GagnonMR::gwasvcf_to_finemapr_gagnon(region = chrompos, vcf = vcffile, bfile = parameters$ldref)
   L<- parameters$L
 
   fitted_rss <- vector(mode = "list", length = length(L))
@@ -829,13 +855,12 @@ get_susie <- function(vcffile, chrompos,
 #' @param vcffile_exp dah
 #' @param vcffile_out dah
 #' @param chrompos dah
-#' @param ldref dah
 #' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return
 #' @export
 
-get_susie_coloc <-function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+get_susie_coloc <-function(vcffile_exp, vcffile_out,  chrompos,
                            parameters=default_param()) {
   message("initializing susie coloc")
   sus1 <- GagnonMR::get_susie(vcffile = vcffile_exp, chrompos = chrompos, parameters = parameters)
@@ -870,13 +895,12 @@ get_susie_coloc <-function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/c
 #' @param vcffile_exp dah
 #' @param vcffile_out dah
 #' @param chrompos dah
-#' @param ldref dah
 #' @param parameters Parameters to be used for various cis-MR methods. Default is output from default_param.
 #'
 #' @return select as instrument the SNP with the highest PIP in each credible set. If no SNP has a p-value under 5e-8 or number of credible sets < 2 return empty data.frame.
 #' @export
 
-get_multicis_susie <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
+get_multicis_susie <- function(vcffile_exp, vcffile_out,  chrompos,
                                parameters = default_param()) {
   message("initializing multicis mr with susie finemapping")
   df_null <- data.frame(exposure= gwasvcf::query_gwas(vcffile_exp, chrompos = "1:40000-80000")@metadata$header@samples, outcome = gwasvcf::query_gwas(vcffile_out, chrompos = "1:40000-80000")@metadata$header@samples, nsnp.multi_cis_susie = 0)
@@ -891,7 +915,7 @@ get_multicis_susie <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/ho
   # if(dat_tsmr[pval.exposure < 5e-8,.N] == 0) {return(df_null)}
 
   out_vcf <- tryCatch(
-    expr = { gwasvcf::query_gwas(vcffile_out, rsid = retain_snp, proxies = "yes", bfile = ldref )  },
+    expr = { gwasvcf::query_gwas(vcffile_out, rsid = retain_snp, proxies = "yes", bfile = paramters$ldref )  },
     error = function(e){return(matrix(nrow = 0, ncol = 1)) })
 
   if(dim(out_vcf)[1]<2) {return(df_null)}
@@ -901,7 +925,7 @@ get_multicis_susie <- function(vcffile_exp, vcffile_out,  chrompos, ldref = "/ho
 ndirectionalyinconsistent <- harm[, sum(steiger_dir == FALSE & steiger_pval < 0.05)]
 harm <- harm[!(steiger_dir == FALSE & steiger_pval < 0.05),]
 
-  ldmat <- ieugwasr::ld_matrix_local(harm$SNP, plink_bin = genetics.binaRies::get_plink_binary(), bfile = ldref)
+  ldmat <- ieugwasr::ld_matrix_local(harm$SNP, plink_bin = genetics.binaRies::get_plink_binary(), bfile = parameters$ldref)
   ldmat_test<-ldmat ; diag(ldmat_test) <- 0
   if (nrow(harm) < 2 | any(ldmat_test == 1) ) {
     return(df_null)
@@ -934,9 +958,12 @@ harm <- harm[!(steiger_dir == FALSE & steiger_pval < 0.05),]
 #' @return the list of default param
 #' @export
 default_param <- function() {
-  return(list(multicis_clumping = c(clump_kb = 1000, clump_r2 = 0.6, clump_p = 1),
+  return(list(multicis_clumping = c(clump_kb = 1000, clump_r2 = 0.6, clump_p = 5e-8),
               pan_clumping = c(pval = 5e-08, r2 = 0.01, kb = 1000),
+              multicis_independent_clumping = c(clump_kb = 10000, clump_r2 = 0.1, clump_p = 5e-8),
               L = 1:10, minpval1 = TRUE, uni_cis_minpval = 5e-8, snp_bim = NULL,
+              proxy_rsq = 0.8,
+              ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/big_EUR_rs",
               path = paste0("/mnt/sda/gagelo01/Vcffile/", c("MRBase", "Server"), "_vcf/")))
 }
 
@@ -948,41 +975,38 @@ default_param <- function() {
 #' @param clump should clump TRUE or FALSE
 #' @param r2 the maximum ld r2
 #' @param kb the clumping kilobases
-#' @param should_write should write (TRUE or FALSE) the instrument in the vcf directory.
 #' @param parameters default_param(), that it is possible to change.
 #'
 #' @return
 #' @export
 
 get_inst <- function(vcffile, pval = 5e-08, clump = TRUE, r2 = 0.001,
-                     kb = 10000, should_write = FALSE, parameters = default_param()) {
+                     kb = 10000, parameters = default_param()) {
   stopifnot(gwasvcf::check_plink()&gwasvcf::check_bcftools())
   instfile <- gsub(".vcf.gz", paste0("_inst_rsquare", r2, "_kb", kb,".txt"), vcffile)
-  if(file.exists(instfile)&clump == TRUE){
-    dat_sign <- read.table(instfile, sep = "\t")
-    data.table::setDT(dat_sign)
-  } else {
-    dat_vcf <- gwasvcf::query_gwas(vcf = vcffile, pval = pval)
-    dat_sign <- dat_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(., "exposure") %>% data.table::as.data.table(.)
-    dat_sign[,id.exposure := gsub(paste(parameters$path, collapse = "|"), "", vcffile) %>% gsub("/.*$|.vcf.gz$", "", .)]
-    if(clump==TRUE) {
-      dat_sign <- GagnonMR::clump_data_local(dat_sign, clump_kb = kb, clump_r2 = r2)
-    }
+  dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = vcffile, vcffile_out = NULL, parameters = parameters)
+  dat_vcf <- gwasvcf::query_gwas(vcf = vcffile, pval = pval)
+  if (!is.null(parameters$snp_bim)) {
+    dat_vcf <- gwasvcf::query_gwas(vcf = dat_vcf, rsid = parameters$snp_bim)
   }
-  if(should_write == TRUE)  {
-    write.table(dat_sign, file = instfile, sep = "\t")
+  if(dim(dat_vcf)[1]==0){return(dt_null)}
+  dat_sign <- dat_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(., "exposure") %>% data.table::as.data.table(.)
+  dat_sign[,id.exposure := gsub(paste(parameters$path, collapse = "|"), "", vcffile) %>% gsub("/.*$|.vcf.gz$", "", .)]
+
+  if(clump==TRUE) {
+    dat_sign <- GagnonMR::clump_data_local(dat_sign, clump_kb = kb, clump_r2 = r2, ldref = parameters$ldref)
   }
+
   return(dat_sign)
 }
-
 
 #' extract outcome
 #'
 #' @param snps a vector of SNPs to extract
 #' @param outcomes the path to the vcf file
+#' @param chrompos NULL if wnat to search the whole genome, otherwise specify in the format "chr:posmin-posmax"
 #' @param proxies passed to the function gwasvcf::query_gwas
 #' @param rsq passed to the function gwasvcf::query_gwas
-#' @param ldref path to plink bed/bim/fam ld reference panel
 #' @param parameters default_param()
 #'
 #' @return
@@ -990,16 +1014,22 @@ get_inst <- function(vcffile, pval = 5e-08, clump = TRUE, r2 = 0.001,
 
 extract_outcome_variant <- function(snps,
                                     outcomes,
+                                    chrompos = NULL,
                                     proxies = "yes",
                                     rsq = 0.8,
-                                    ldref = "/home/couchr02/Mendel_Commun/Christian/LDlocal/EUR_rs",
                                     parameters = default_param()) {
 
   stopifnot(gwasvcf::check_bcftools()&gwasvcf::check_plink())
   dt_null<-GagnonMR:::intern_dt_null(vcffile_exp = NULL, vcffile_out = outcomes, parameters = parameters)
+  stopifnot(proxies %in% c("yes", "no"))
   res <- purrr::map(outcomes, function(x) {
     out_vcf <- tryCatch(
-      expr = {gwasvcf::query_gwas(vcf = x, rsid = unique(snps), proxies = proxies, bfile = ldref, tag_r2 = rsq) },
+      expr = {
+        if(is.null(chrompos)) {
+          gwasvcf::query_gwas(vcf = x, rsid = unique(snps), proxies = proxies, bfile = parameters$ldref, tag_r2 = rsq)} else {
+            gwasvcf::query_gwas(vcf = x, chrompos = chrompos) %>%
+              gwasvcf::query_gwas(., rsid = unique(snps), proxies = proxies, bfile = parameters$ldref, tag_r2 = rsq)
+          }},
       error = function(e){return(matrix(nrow = 0, ncol = 1))})
     if (dim(out_vcf)[1] == 0) {return(dt_null)}
     out_tsmr <- out_vcf %>% gwasglue::gwasvcf_to_TwoSampleMR(.,
@@ -1010,6 +1040,7 @@ extract_outcome_variant <- function(snps,
 
   return(res)
 }
+
 
 
 #' Function that exits if you code takes 95 of total memory
@@ -1157,13 +1188,13 @@ get_coloc_intern <- function(vout, dt_null) {
   pp <- as.data.table(as.list(vres$summary[2:6]))
   colnames(pp) <- paste0("posprob_coloc_PPH", 0:4)
   vresres <- vres$results %>% as.data.table(.)
-  df_res1 <- data.frame(exposure = vout$dataset1$id[1], outcome = vout$dataset2$id[1])
+  df_res1 <- data.frame(id.exposure = vout[[1]]$id[1], id.outcome = vout[[2]]$id[1])
   df_res2 <- data.frame(posprob_colocH4.SNP = vresres[which.max(SNP.PP.H4),
                                                       snp], posprob_colocH4.SNPexplained_var = vresres[which.max(SNP.PP.H4),
                                                                                                        SNP.PP.H4])
   dt_res <- do.call(cbind, list(df_res1, pp, df_res2)) %>%
     data.table::as.data.table(.)
-  dt_res <- merge(dt_null, dt_res, by = c("exposure", "outcome"))
+  dt_res <- merge(dt_null, dt_res, by = c("id.exposure", "id.outcome"))
   return(dt_res)
 }
 
@@ -1201,4 +1232,102 @@ get_uni_cis_intern <- function(dat_exposure, dat_outcome, dt_null) {
   return(res_all)
 }
 
+#' Extract instrument from a gene region
+#'
+#' @param vcffile_vec_inst can be vector of path of vcf GWAS from which instrument will be selected
+#' @param vcffile_vec_noinst can be vector of path of vcf GWAS, instrument will not be selected from this GWAS, but instrument will selected from vcffile_vec_inst
+#' @param gene_region the gene_region in the form chr:pos-pos
+#' @param skip_homogenous the homogenous step ensure directionnaly consistent and pval > 0.05 accross all vcffile_vec_inst
+#' @param typeof_sel the type of instrument selection strategy either or all three of them c("lead_snp", "multicis_clumping", "multicis_independent_clumping")
+#' @param parameters the parameters argument
+#'
+#' @return
+#' @export
 
+get_cisinst_from_vcffile_vec <- function(vcffile_vec_inst,
+                                         vcffile_vec_noinst = NULL,
+                                         gene_region,
+                                         skip_homogenous = TRUE,
+                                         typeof_sel = c("lead_snp", "multicis_clumping", "multicis_independent_clumping"),
+                                         parameters = default_param()
+
+) {
+
+  dat_tsmr <- GagnonMR:::intern_vcfpath_to_TwoSampelMR_region(vcf = c(vcffile_vec_inst,vcffile_vec_noinst),
+                                                              chrompos = gene_region, parameters = parameters)
+  dt_null <- GagnonMR:::intern_dt_null(vcffile_exp = c(vcffile_vec_inst,vcffile_vec_noinst),
+                                       vcffile_out = NULL, parameters = parameters)
+
+  id_selinst<-dt_null[1:length(vcffile_vec_inst), id.exposure]
+  rsid <- dat_tsmr[id.exposure %in% id_selinst & dat_tsmr$pval.exposure < parameters$uni_cis_minpval, ]$SNP
+  if (!is.null(parameters$snp_bim)) {
+    rsid <- rsid[rsid %in% parameters$snp_bim]
+  }
+
+  dat1<-data.table()
+  dat2<-data.table()
+  dat3<-data.table()
+
+  if("lead_snp" %in% typeof_sel) {
+    dat1 <- dat_tsmr[SNP%in%rsid, .SD[which.min(pval.exposure)], by = "id.exposure"]
+    dat1[,typeof_sel := "lead_snp"]
+  }
+
+  if(any(c("multicis_clumping", "multicis_independent_clumping") %in% typeof_sel) & length(rsid)>0) {
+  dat_ld <- extract_outcome_variant(snps = rsid, outcomes = vcffile_vec_inst, chrompos = gene_region, proxies = "yes", rsq = parameters$proxy_rsq, parameters = parameters) %>%
+    GagnonMR::convert_outcome_to_exposure(.) %>% as.data.table(.)
+
+  if(skip_homogenous==FALSE) {
+    dat_ld <- dat_ld[!(SNP %in% dat_ld[pval.exposure>0.05, unique(SNP)]), ]#at least nominally significant in all study
+    dat_ld <- GagnonMR::prepare_for_mvmr(exposure_dat = dat_ld, d1 = dat_ld, should_clump = FALSE, harmonise_strictness = 1,parameters = parameters)
+    k<-dat_ld[, all(beta.exposure<0)|all(beta.exposure>0),by = "SNP"][V1==TRUE,SNP]#directionnaly consistent in all study
+    dat_ld <- dat_ld[SNP%in%k,]
+  }
+
+  if (dim(dat_ld)[1] == 0) {
+    return(dt_null)
+  }
+
+
+  dat_ld_multi <- dat_ld[, .SD[which.min(pval.exposure)], by = "SNP"]
+  dat_ld_multi[,id.exposure_real := id.exposure]
+  dat_ld_multi[,id.exposure:=1]
+
+
+  if("multicis_clumping" %in% typeof_sel) {
+    if (dat_ld_multi[pval.exposure<parameters$multicis_clumping["clump_p"], .N]==0) {
+      dat2<-dt_null
+    } else {
+      dat2 <- clump_data_local(dat = dat_ld_multi, ldref = parameters$ldref,
+                               clump_kb = parameters$multicis_clumping["clump_kb"],
+                               clump_r2 = parameters$multicis_clumping["clump_r2"],
+                               clump_p = parameters$multicis_clumping["clump_p"])
+      dat2<- dat_ld[SNP %in% unique(dat2$SNP),]
+      if(!is.null(vcffile_vec_noinst)) {
+        dat_noinst <- extract_outcome_variant(snps = unique(dat2$SNP), outcomes = vcffile_vec_noinst, chrompos = gene_region, proxies = "yes", rsq = parameters$proxy_rsq, parameters = parameters) %>%
+          GagnonMR::convert_outcome_to_exposure(.) %>% as.data.table(.)
+        dat2 <-  rbindlist(list(dat2, dat_noinst), fill = TRUE)}
+    }
+    dat2[,typeof_sel := "multicis_clumping"]
+  }
+
+  if("multicis_independent_clumping" %in% typeof_sel) {
+    if (dat_ld_multi[pval.exposure<parameters$multicis_independent_clumping["clump_p"], .N]==0) {
+      dat3<-dt_null
+    } else {
+      dat3 <- clump_data_local(dat = dat_ld_multi, ldref = parameters$ldref,
+                               clump_kb = parameters$multicis_independent_clumping["clump_kb"],
+                               clump_r2 = parameters$multicis_independent_clumping["clump_r2"],
+                               clump_p = parameters$multicis_independent_clumping["clump_p"])
+      dat3<- dat_ld[SNP %in% dat3$SNP, ]
+      if(!is.null(vcffile_vec_noinst)) {
+        dat_noinst <- extract_outcome_variant(snps = unique(dat3$SNP), outcomes = vcffile_vec_noinst, chrompos = gene_region, proxies = "yes", rsq = parameters$proxy_rsq, parameters = parameters) %>%
+          GagnonMR::convert_outcome_to_exposure(.) %>% as.data.table(.)
+        dat3 <-  rbindlist(list(dat3, dat_noinst), fill = TRUE)}
+    }
+    dat3[,typeof_sel := "multicis_independent_clumping"]
+  }
+}
+  dat_ld_clumped <- rbindlist(list(dat1,dat2,dat3), fill = TRUE)
+  return(dat_ld_clumped)
+}
